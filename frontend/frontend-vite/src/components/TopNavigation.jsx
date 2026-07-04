@@ -263,10 +263,8 @@ export default function TopNavigation() {
           )}
 
           {(() => { const f = getActiveFestival(); return f ? (
-            <span style={{
-              fontSize: '13px', fontWeight: 600, padding: '4px 10px', borderRadius: '8px',
-              color: f.colors[0], background: `${f.colors[0]}20`, marginRight: '4px',
-              whiteSpace: 'nowrap'
+            <span className="festival-badge" style={{
+              color: f.colors[0], background: `${f.colors[0]}20`
             }}>
               {f.emoji} {f.name}
             </span>
@@ -274,64 +272,26 @@ export default function TopNavigation() {
 
           <NotificationPanel />
 
-          <div className="user-menu" style={{ position: 'relative', zIndex: 101 }}>
+          <div className="user-menu">
             <button
               className="user-button"
               onClick={() => setShowUserMenu(!showUserMenu)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                background: 'rgba(255, 255, 255, 0.1)', color: 'var(--sidebar-text)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                padding: '8px 14px', borderRadius: '10px', cursor: 'pointer',
-                transition: 'all 0.3s ease', fontSize: '14px', fontWeight: '500'
-              }}
-              onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.15)'}
-              onMouseLeave={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.1)'}
             >
-              <div style={{
-                width: '32px', height: '32px', borderRadius: '8px',
-                background: '#0052CC', color: 'white', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '14px'
-              }}>
-                {currentUser.initial}
-              </div>
-              <span>{currentUser.username}</span>
-              <span style={{ fontSize: '10px' }}>▼</span>
+              <div className="user-avatar">{currentUser.initial}</div>
+              <span className="user-name">{currentUser.username}</span>
+              <span className="user-chevron">&#9662;</span>
             </button>
 
             {showUserMenu && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0,
-                background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
-                borderRadius: '12px', minWidth: '200px', marginTop: '8px',
-                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.12)', zIndex: 10000, overflow: 'hidden'
-              }}>
-                <a href="/profile" className="dropdown-item" style={{
-                  display: 'flex', alignItems: 'center', gap: '12px', width: '100%',
-                  padding: '12px 16px', border: 'none', background: 'transparent',
-                  color: 'var(--text-primary)', textDecoration: 'none', cursor: 'pointer',
-                  fontSize: '14px', fontWeight: '500', transition: 'all 0.2s ease'
-                }}>
-                  <FaUser style={{ fontSize: '16px', color: 'var(--text-muted)' }} />
-                  Profile
+              <div className="user-dropdown">
+                <a href="/profile" className="user-dropdown-item">
+                  <FaUser /> Profile
                 </a>
-                <a href="/settings" className="dropdown-item" style={{
-                  display: 'flex', alignItems: 'center', gap: '12px', width: '100%',
-                  padding: '12px 16px', border: 'none', background: 'transparent',
-                  color: 'var(--text-primary)', textDecoration: 'none', cursor: 'pointer',
-                  fontSize: '14px', fontWeight: '500', transition: 'all 0.2s ease'
-                }}>
-                  <FaCog style={{ fontSize: '16px', color: 'var(--text-muted)' }} />
-                  Settings
+                <a href="/settings" className="user-dropdown-item">
+                  <FaCog /> Settings
                 </a>
-                <button onClick={handleLogout} style={{
-                  display: 'flex', alignItems: 'center', gap: '12px', width: '100%',
-                  padding: '12px 16px', border: 'none', background: 'transparent',
-                  color: '#dc2626', cursor: 'pointer', fontSize: '14px', fontWeight: '500',
-                  transition: 'all 0.2s ease', borderTop: '1px solid var(--border-color)'
-                }}>
-                  <FaSignOutAlt style={{ fontSize: '16px' }} />
-                  Logout
+                <button onClick={handleLogout} className="user-dropdown-item logout">
+                  <FaSignOutAlt /> Logout
                 </button>
               </div>
             )}
