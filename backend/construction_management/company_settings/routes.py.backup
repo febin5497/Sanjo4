@@ -1,0 +1,51 @@
+from flask import Blueprint, request, jsonify
+from middleware.auth_middleware import require_role
+from flask_jwt_extended import jwt_required
+from extensions import db
+from company_settings.models import CompanySettings
+
+# ✅ Blueprint (registered as /company in app.py)
+company_bp = Blueprint('company', __name__)
+
+# ✅ GET /company/settings
+@company_bp.route('/settings', methods=['GET'])
+@jwt_required()
+def get_company_settings():
+    user = require_role(["admin","manager"])
+
+    if isinstance(user, tuple):
+        return user
+
+def get_company_settings():
+    settings = CompanySettings.query.first()
+    if not settings:
+        return jsonify({}), 200
+    return jsonify(settings.to_dict())
+
+# ✅ PUT /company/settings (update without touching logo)
+@company_bp.route('/settings', methods=['PUT'])
+@jwt_required()
+def update_company_settings():
+    user = require_role(["admin","manager"])
+
+    if isinstance(user, tuple):
+        return user
+
+def update_company_settings():
+    data = request.json
+    settings = CompanySettings.query.first()
+
+    if not settings:
+        settings = CompanySettings()
+        db.session.add(settings)
+
+    settings.name = data.get('name', settings.name)
+    settings.address = data.get('address', settings.address)
+    settings.phone = data.get('phone', settings.phone)
+    settings.email = data.get('email', settings.email)
+    settings.gst_number = data.get('gst_number', settings.gst_number)
+
+    # 🚫 Don't touch the logo field — it stays as-is (assumed to be a static path)
+    db.session.commit()
+
+    return jsonify({'message': 'Company settings updated successfully'})

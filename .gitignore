@@ -1,0 +1,6 @@
+# Project-level ignores (fallback for anything per-project gitignore misses)
+*.log
+*.db
+*.sqlite
+node_modules/
+.env

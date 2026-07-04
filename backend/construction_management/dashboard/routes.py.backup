@@ -1,0 +1,54 @@
+from flask import Blueprint, jsonify
+from middleware.auth_middleware import require_role
+from flask_jwt_extended import jwt_required
+
+dashboard_bp = Blueprint('dashboard', __name__)
+
+@dashboard_bp.route('/dashboard', methods=['GET'])
+@jwt_required()
+def dashboard_summary():
+    user = require_role(["admin","manager"])
+
+    if isinstance(user, tuple):
+        return user
+
+def dashboard_summary():
+    try:
+        from project_management.models import Project
+        from staff_management.models import Staff
+        from vehicle_management.models import Vehicle
+        from material_management.models import Material
+        from finance_management.models.transaction import Transaction
+
+        total_projects = Project.query.count()
+        total_staff = Staff.query.count()
+        total_vehicles = Vehicle.query.count()
+
+Material.query.filter_by(company_id=user.company_id).all()
+        total_material_qty = sum((m.quantity or 0) for m in materials)
+
+Transaction.query.filter_by(company_id=user.company_id).all()
+
+        total_income = sum((t.amount or 0) for t in transactions if t.type == "income")
+        total_expense = sum((t.amount or 0) for t in transactions if t.type == "expense")
+
+        return jsonify({
+            "total_projects": total_projects,
+            "total_staff": total_staff,
+            "total_vehicles": total_vehicles,
+            "total_material_quantity": total_material_qty,
+            "total_income": total_income,
+            "total_expense": total_expense
+        })
+
+    except Exception as e:
+        print("Dashboard error:", e)
+
+        return jsonify({
+            "total_projects": 0,
+            "total_staff": 0,
+            "total_vehicles": 0,
+            "total_material_quantity": 0,
+            "total_income": 0,
+            "total_expense": 0
+        })

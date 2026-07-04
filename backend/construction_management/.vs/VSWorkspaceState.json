@@ -1,0 +1,16 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\attendance_management",
+    "\\company_settings",
+    "\\document_management",
+    "\\finance_management",
+    "\\finance_management\\routes",
+    "\\project_management",
+    "\\project_management\\routes",
+    "\\user_management",
+    "\\utils"
+  ],
+  "SelectedNode": "\\user_management\\routes.py",
+  "PreviewInSolutionExplorer": false
+}

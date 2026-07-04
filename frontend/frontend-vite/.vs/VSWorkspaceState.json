@@ -1,0 +1,12 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\src",
+    "\\src\\api",
+    "\\src\\auth",
+    "\\src\\components",
+    "\\src\\pages"
+  ],
+  "SelectedNode": "\\src\\pages\\Login.jsx",
+  "PreviewInSolutionExplorer": false
+}

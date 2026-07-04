@@ -1,0 +1,239 @@
+from flask import Blueprint, request, jsonify, current_app, render_template_string, make_response
+from middleware.auth_middleware import require_role
+from flask_jwt_extended import jwt_required, decode_token
+from flask_mail import Message
+from datetime import datetime
+from xhtml2pdf import pisa
+from io import BytesIO
+import qrcode
+import base64
+
+# Import db and mail configuration from extensions.py
+from extensions import db, mail
+from company_settings.models import Company
+
+# Import Attendance model explicitly to avoid circular import
+from attendance_management.models import Attendance
+
+attendance_bp = Blueprint('attendance', __name__)
+
+# ------------------ Attendance Marking ------------------
+@attendance_bp.route('/attendance', methods=['POST'])
+@jwt_required()
+def mark_attendance():
+    user = require_role(["admin","manager"])
+
+    if isinstance(user, tuple):
+        return user
+
+def mark_attendance():
+    try:
+        data = request.form or request.get_json()
+        if not data:
+            return jsonify({"error": "No data received"}), 400
+
+        if not data.get('staff_id') or not data.get('date'):
+            return jsonify({"error": "Missing staff_id or date"}), 400
+
+        staff_id = int(data['staff_id'])
+        date_obj = datetime.strptime(data['date'], '%Y-%m-%d').date()
+
+        # Check if attendance for the same staff and date already exists
+        existing = Attendance.query.filter_by(staff_id=staff_id, date=date_obj).first()
+        if existing:
+            return jsonify({"error": "Attendance for this date already exists."}), 400
+
+        present = str(data.get('present')).lower() in ['true', 'on', '1']
+        half_day = str(data.get('half_day')).lower() in ['true', 'on', '1']
+        night_shift = str(data.get('night_shift')).lower() in ['true', 'on', '1']
+        overtime_hours = float(data.get('overtime_hours', 0))
+
+        new_entry = Attendance(
+            staff_id=staff_id,
+            date=date_obj,
+            present=present,
+            half_day=half_day,
+            night_shift=night_shift,
+            overtime_hours=overtime_hours
+        )
+
+        db.session.add(new_entry)
+        db.session.commit()
+        return jsonify({"msg": "Attendance recorded."}), 201
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 400
+
+
+# ------------------ Fetch Attendance ------------------
+@attendance_bp.route('/attendance', methods=['GET'])
+@jwt_required()
+def get_attendance():
+    user = require_role(["admin","manager"])
+
+    if isinstance(user, tuple):
+        return user
+
+def get_attendance():
+    # Fetch the Attendance model explicitly
+    from attendance_management.models import Attendance
+
+    staff_id = request.args.get('staff_id')
+    month = int(request.args.get('month'))
+    year = int(request.args.get('year'))
+
+    attendance = Attendance.query.filter(
+        Attendance.staff_id == staff_id,
+        db.extract('month', Attendance.date) == month,
+        db.extract('year', Attendance.date) == year
+    ).all()
+
+    return jsonify([a.to_dict() for a in attendance])
+
+
+# ------------------ Salary Slip Calculation ------------------
+def calculate_salary_slip(staff, attendances, month, year):
+    full_days = sum(1 for a in attendances if a.present and not a.half_day)
+    half_days = sum(1 for a in attendances if a.half_day)
+    night_shifts = sum(1 for a in attendances if a.night_shift)
+    overtime_total = sum(a.overtime_hours for a in attendances)
+
+    daily_rate = staff.salary / 30
+    gross_salary = (full_days * daily_rate) + (half_days * (daily_rate / 2))
+    gross_salary += night_shifts * 250 + overtime_total * 100
+
+    pf = (staff.pf or 0) / 100 * gross_salary
+    esi = (staff.esi or 0) / 100 * gross_salary
+    net_salary = gross_salary - pf - esi
+
+    return {
+        "staff": staff.name,
+        "staff_id": staff.id,
+        "email": staff.email,
+        "month": month,
+        "year": year,
+        "full_days": full_days,
+        "half_days": half_days,
+        "night_shifts": night_shifts,
+        "overtime_hours": overtime_total,
+        "gross_salary": round(gross_salary, 2),
+        "pf": round(pf, 2),
+        "esi": round(esi, 2),
+        "net_salary": round(net_salary, 2)
+    }
+
+
+# ------------------ QR Code Generator ------------------
+def generate_qr_code(data):
+    qr = qrcode.QRCode(version=1, box_size=2, border=1)
+    qr.add_data(data)
+    qr.make(fit=True)
+    img = qr.make_image(fill='black', back_color='white')
+
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    base64_image = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    return f"data:image/png;base64,{base64_image}"
+
+
+# ------------------ HTML Renderer ------------------
+def render_salary_html(result, base_url):
+    month_year = datetime(result['year'], result['month'], 1).strftime('%B %Y')
+    qr_data = f"Staff ID: {result['staff_id']}, Name: {result['staff']}, Month: {month_year}, Net Salary: ₹{result['net_salary']}"
+    qr_img = generate_qr_code(qr_data)
+
+    settings = CompanySettings.query.first()
+    company_html = f"""<div class="company-details">
+        <strong>{settings.name}</strong><br>
+        {settings.address}<br>
+        📞 {settings.phone} | ✉️ {settings.email}<br>
+        GST: {settings.gst_number}
+    </div>""" if settings else "<div class='company-details'>Company Info Not Available</div>"
+
+    return f"""
+    <!DOCTYPE html>
+    <html><head><meta charset="UTF-8"><style>
+        body {{ font-family: Arial, sans-serif; padding: 25px 30px; font-size: 12pt; color: #333; }}
+        .header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }}
+        .header img {{ height: 90px; }}
+        .company-details {{ text-align: right; font-size: 14pt; font-weight: bold; line-height: 1.2; }}
+        .title-section {{ margin-top: 10px; margin-bottom: 20px; font-size: 12pt; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11pt; }}
+        th, td {{ border: 1px solid #999; padding: 8px; text-align: left; }}
+        th {{ background-color: #eee; }}
+        .net-total td {{ font-weight: bold; font-size: 12pt; }}
+        .qr-code {{ text-align: center; margin-top: 25px; }}
+    </style></head><body>
+        <div class="header">
+            <img src="{base_url}static/logo.png" alt="Logo">
+            {company_html}
+        </div>
+        <div class="title-section">
+            <strong>Salary Slip - {month_year}</strong><br>
+            <strong>Employee Name:</strong> {result['staff'].upper()}<br>
+            <strong>Employee ID:</strong> {result['staff_id']}
+        </div>
+        <table>
+            <tr><td><strong>Full Days</strong></td><td>{result['full_days']}</td></tr>
+            <tr><td><strong>Half Days</strong></td><td>{result['half_days']}</td></tr>
+            <tr><td><strong>Night Shifts</strong></td><td>{result['night_shifts']}</td></tr>
+            <tr><td><strong>Overtime Hours</strong></td><td>{result['overtime_hours']}</td></tr>
+            <tr><td><strong>Gross Salary</strong></td><td>₹{result['gross_salary']}</td></tr>
+            <tr><td><strong>PF Deduction</strong></td><td>₹{result['pf']}</td></tr>
+            <tr><td><strong>ESI Deduction</strong></td><td>₹{result['esi']}</td></tr>
+            <tr class="net-total"><td><strong>Net Salary</strong></td><td>₹{result['net_salary']}</td></tr>
+        </table>
+        <div class="qr-code">
+            <p><strong>Verification QR Code</strong></p>
+            <img src="{qr_img}" width="100" height="100" alt="QR Code">
+        </div>
+    </body></html>"""
+
+
+# ------------------ Email with PDF ------------------
+@attendance_bp.route('/salary-slip/<int:staff_id>', methods=['GET'])
+@jwt_required()
+def generate_salary_slip(staff_id):
+    user = require_role(["admin","manager"])
+
+    if isinstance(user, tuple):
+        return user
+
+def generate_salary_slip(staff_id):
+    month = int(request.args.get('month'))
+    year = int(request.args.get('year'))
+
+    # Lazy import for Staff model
+    from staff_management.models import Staff
+
+    staff = Staff.query.get_or_404(staff_id)
+    attendances = Attendance.query.filter(
+        Attendance.staff_id == staff_id,
+        db.extract('month', Attendance.date) == month,
+        db.extract('year', Attendance.date) == year
+    ).all()
+
+    result = calculate_salary_slip(staff, attendances, month, year)
+    html = render_salary_html(result, request.url_root)
+    pdf = BytesIO()
+    pisa.CreatePDF(src=html, dest=pdf)
+    pdf.seek(0)
+
+    msg = Message(
+        subject=f"Your Salary Slip for {datetime(year, month, 1).strftime('%B %Y')}",
+        sender=current_app.config['MAIL_USERNAME'],
+        recipients=[result['email']],
+        html=html
+    )
+    msg.attach(f"Salary_Slip_{staff_id}_{month}_{year}.pdf", "application/pdf", pdf.read())
+
+    try:
+        mail.send(msg)
+        result["email_sent"] = True
+    except Exception as e:
+        result["email_sent"] = False
+        result["email_error"] = str(e)
+
+    return jsonify(result)

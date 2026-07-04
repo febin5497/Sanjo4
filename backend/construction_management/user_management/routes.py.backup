@@ -1,0 +1,117 @@
+from flask import Blueprint, request, jsonify
+from middleware.auth_middleware import require_role
+from flask_jwt_extended import create_access_token
+from extensions import db
+from user_management.models import User
+from company_settings.models import Company
+
+auth_bp = Blueprint("auth", __name__)
+
+
+# -----------------------------
+# REGISTER USER (SaaS Version)
+# -----------------------------
+@auth_bp.route("/register", methods=["POST"])
+def register():
+
+    data = request.get_json()
+
+    username = data.get("username")
+    password = data.get("password")
+    company_name = data.get("company")
+
+    if not username or not password or not company_name:
+        return jsonify({
+            "error": "username, password and company are required"
+        }), 400
+
+    # Find company
+    company = Company.query.filter_by(name=company_name).first()
+
+    if not company:
+        return jsonify({
+            "error": "Company not found"
+        }), 404
+
+    # Check existing user inside the same company
+    existing_user = User.query.filter_by(
+        username=username,
+        company_id=company.id
+    ).first()
+
+    if existing_user:
+        return jsonify({
+            "error": "User already exists in this company"
+        }), 400
+
+    # Create user
+    user = User(
+        username=username,
+        company_id=company.id,
+        role="worker"
+    )
+
+    user.set_password(password)
+
+    db.session.add(user)
+    db.session.commit()
+
+    return jsonify({
+        "message": "User registered successfully"
+    }), 201
+
+
+# -----------------------------
+# LOGIN (SaaS Multi Company)
+# -----------------------------
+@auth_bp.route("/login", methods=["POST"])
+def login():
+
+    data = request.get_json()
+
+    username = data.get("username")
+    password = data.get("password")
+    company_name = data.get("company")
+
+    if not username or not password or not company_name:
+        return jsonify({
+            "error": "username, password and company required"
+        }), 400
+
+    # Find company
+    company = Company.query.filter_by(name=company_name).first()
+
+    if not company:
+        return jsonify({
+            "error": "Company not found"
+        }), 404
+
+    # Find user inside that company
+    user = User.query.filter_by(
+        username=username,
+        company_id=company.id
+    ).first()
+
+    if not user or not user.check_password(password):
+        return jsonify({
+            "error": "Invalid credentials"
+        }), 401
+
+    # Create JWT token
+    token = create_access_token(
+        identity=str(user.id),
+        additional_claims={
+            "company_id": user.company_id,
+            "role": user.role
+        }
+    )
+
+    return jsonify({
+        "access_token": token,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+            "company": company.name
+        }
+    })

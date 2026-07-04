@@ -1,0 +1,15 @@
+# Testing Requirements
+pytest==7.4.0
+pytest-cov==4.1.0
+pytest-mock==3.11.1
+coverage==7.2.7
+Flask-Testing==0.8.1
+
+# Production requirements (if not already installed)
+Flask==2.3.0
+Flask-JWT-Extended==4.4.4
+SQLAlchemy==2.0.0
+Flask-SQLAlchemy==3.0.0
+
+# PDF Generation
+reportlab==4.0.4

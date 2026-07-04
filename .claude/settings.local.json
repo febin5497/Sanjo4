@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find D:/Projects/backend -type f -name *finance* -o -name *payment* -o -name *budget*)",
+      "Bash(xargs grep:*)",
+      "Bash(find \"D:/Projects/frontend/frontend-vite/src\" -name \"*.jsx\" -exec grep -l \"useEffect.*loadData\\\\|useState.*loading\" {})",
+      "Bash(xargs wc:*)",
+      "Bash(grep -h class.*db.Model D:/Projects/backend/construction_management/**/models*.py)",
+      "Bash(grep -E \"\\(src|pages|components\\)$\")",
+      "Bash(bash \"D:\\\\Projects\\\\COMPREHENSIVE_SYSTEM_TEST.sh\")",
+      "Bash(tee \"D:\\\\Projects\\\\TEST_RESULTS.txt\")",
+      "Bash(find D:/Projects/frontend/frontend-vite/src -name *login* -o -name *Login*)",
+      "Bash(python -c \":*)",
+      "Bash(curl -s http://localhost:5000/)",
+      "Bash(pkill -f \"flask run\")",
+      "Bash(timeout 5 python -m flask run --port=5000)",
+      "Bash(python -m flask db upgrade)"
+    ]
+  }
+}

@@ -1,0 +1,65 @@
+from flask import Blueprint, request, jsonify
+from middleware.auth_middleware import require_role
+from material_management.models import Material
+from extensions import db
+
+material_bp = Blueprint('material', __name__)
+
+# Create a new material
+@material_bp.route('/', methods=['POST'])
+def create_material():
+    data = request.json
+
+    if not data.get('name') or not data.get('quantity') or not data.get('price'):
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    material = Material(
+        name=data.get('name'),
+        description=data.get('description'),
+        quantity=data.get('quantity'),
+        unit_of_measurement=data.get('unit_of_measurement'),
+        price=data.get('price'),
+        project_id=data.get('project_id')  # Link to project if available
+    )
+
+    db.session.add(material)
+    db.session.commit()
+    
+    return jsonify({'message': 'Material created successfully', 'id': material.id}), 201
+
+# Get all materials
+@material_bp.route('/', methods=['GET'])
+def get_materials():
+Material.query.filter_by(company_id=user.company_id).all()
+    return jsonify([material.to_dict() for material in materials])
+
+# Get a specific material by ID
+@material_bp.route('/<int:material_id>', methods=['GET'])
+def get_material(material_id):
+    material = Material.query.get_or_404(material_id)
+    return jsonify(material.to_dict())
+
+# Update material details
+@material_bp.route('/<int:material_id>', methods=['PUT'])
+def update_material(material_id):
+    material = Material.query.get_or_404(material_id)
+    data = request.json
+
+    # Update material fields
+    material.name = data.get('name', material.name)
+    material.description = data.get('description', material.description)
+    material.quantity = data.get('quantity', material.quantity)
+    material.unit_of_measurement = data.get('unit_of_measurement', material.unit_of_measurement)
+    material.price = data.get('price', material.price)
+    material.project_id = data.get('project_id', material.project_id)
+
+    db.session.commit()
+    return jsonify({'message': 'Material updated successfully'})
+
+# Delete material by ID
+@material_bp.route('/<int:material_id>', methods=['DELETE'])
+def delete_material(material_id):
+    material = Material.query.get_or_404(material_id)
+    db.session.delete(material)
+    db.session.commit()
+    return jsonify({'message': 'Material deleted successfully'})

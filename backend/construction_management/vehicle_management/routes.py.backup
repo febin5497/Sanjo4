@@ -1,0 +1,158 @@
+from flask import Blueprint, request, jsonify
+from middleware.auth_middleware import require_role
+from flask_jwt_extended import jwt_required
+from vehicle_management.models import Vehicle
+from extensions import db
+from datetime import datetime
+
+vehicle_bp = Blueprint('vehicle', __name__)
+
+def parse_date(date_str):
+    """Helper function to parse date string to date object."""
+    try:
+        return datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else None
+    except ValueError:
+        return None  # In case the date string is not in the correct format
+
+def validate_vehicle_type(vehicle_type):
+    """Helper function to validate vehicle type."""
+    valid_types = ['private', 'commercial', 'tipper']
+    if vehicle_type not in valid_types:
+        return False
+    return True
+
+# Create a new vehicle
+@vehicle_bp.route('/vehicles', methods=['POST'])
+@jwt_required()
+def create_vehicle():
+    user = require_role(["admin","manager"])
+
+    if isinstance(user, tuple):
+        return user
+
+def create_vehicle():
+    data = request.json
+    
+    # Check for required fields
+    if not data.get('make'):
+        return jsonify({'error': 'Missing required field: make'}), 400
+    if not data.get('model'):
+        return jsonify({'error': 'Missing required field: model'}), 400
+    if not data.get('year'):
+        return jsonify({'error': 'Missing required field: year'}), 400
+    if not data.get('registration_number'):
+        return jsonify({'error': 'Missing required field: registration_number'}), 400
+    
+    # Validate vehicle type
+    if not data.get('type'):
+        return jsonify({'error': 'Missing required field: type'}), 400
+    if not validate_vehicle_type(data.get('type')):
+        return jsonify({'error': 'Invalid vehicle type. Valid types are: private, commercial, tipper'}), 400
+
+    # Parse date fields
+    registration_date = parse_date(data.get('registration_date'))
+    pollution_date = parse_date(data.get('pollution_date'))
+    insurance_date = parse_date(data.get('insurance_date'))
+    tax_date = parse_date(data.get('tax_date'))
+    geology_certificate_date = parse_date(data.get('geology_certificate_date'))
+
+    vehicle = Vehicle(
+        make=data.get('make'),
+        model=data.get('model'),
+        year=data.get('year'),
+        registration_number=data.get('registration_number'),
+        mileage=data.get('mileage', 0),
+        status=data.get('status', 'active'),
+        type=data.get('type'),
+        registration_date=registration_date,
+        pollution_date=pollution_date,
+        insurance_date=insurance_date,
+        emi_status=data.get('emi_status', False),
+        emi_amount=data.get('emi_amount', None),
+        tax_date=tax_date,
+        geology_certificate_date=geology_certificate_date,
+    )
+
+    db.session.add(vehicle)
+    db.session.commit()
+    
+    return jsonify({'message': 'Vehicle created successfully', 'id': vehicle.id}), 201
+
+# Get all vehicles
+@vehicle_bp.route('/vehicles', methods=['GET'])
+@jwt_required()
+def get_vehicles():
+    user = require_role(["admin","manager"])
+
+    if isinstance(user, tuple):
+        return user
+
+def get_vehicles():
+Vehicle.query.filter_by(company_id=user.company_id).all()
+    return jsonify([vehicle.to_dict() for vehicle in vehicles])
+
+# Get a specific vehicle by ID
+@vehicle_bp.route('/vehicles/<int:vehicle_id>', methods=['GET'])
+@jwt_required()
+def get_vehicle(vehicle_id):
+    user = require_role(["admin","manager"])
+
+    if isinstance(user, tuple):
+        return user
+
+def get_vehicle(vehicle_id):
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    return jsonify(vehicle.to_dict())
+
+# Update a vehicle's details
+@vehicle_bp.route('/vehicles/<int:vehicle_id>', methods=['PUT'])
+@jwt_required()
+def update_vehicle(vehicle_id):
+    user = require_role(["admin","manager"])
+
+    if isinstance(user, tuple):
+        return user
+
+def update_vehicle(vehicle_id):
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    data = request.json
+    
+    # Check if the vehicle type is valid
+    if 'type' in data and not validate_vehicle_type(data.get('type')):
+        return jsonify({'error': 'Invalid vehicle type'}), 400
+
+    # Update vehicle fields
+    vehicle.make = data.get('make', vehicle.make)
+    vehicle.model = data.get('model', vehicle.model)
+    vehicle.year = data.get('year', vehicle.year)
+    vehicle.registration_number = data.get('registration_number', vehicle.registration_number)
+    vehicle.mileage = data.get('mileage', vehicle.mileage)
+    vehicle.status = data.get('status', vehicle.status)
+    vehicle.type = data.get('type', vehicle.type)
+
+    # Update date fields with proper parsing
+    vehicle.registration_date = parse_date(data.get('registration_date', vehicle.registration_date))
+    vehicle.pollution_date = parse_date(data.get('pollution_date', vehicle.pollution_date))
+    vehicle.insurance_date = parse_date(data.get('insurance_date', vehicle.insurance_date))
+    vehicle.tax_date = parse_date(data.get('tax_date', vehicle.tax_date))
+    vehicle.geology_certificate_date = parse_date(data.get('geology_certificate_date', vehicle.geology_certificate_date))
+
+    vehicle.emi_status = data.get('emi_status', vehicle.emi_status)
+    
+    db.session.commit()
+    return jsonify({'message': 'Vehicle updated successfully'})
+
+# Delete a vehicle by ID
+@vehicle_bp.route('/vehicles/<int:vehicle_id>', methods=['DELETE'])
+@jwt_required()
+def delete_vehicle(vehicle_id):
+    user = require_role(["admin","manager"])
+
+    if isinstance(user, tuple):
+        return user
+
+def delete_vehicle(vehicle_id):
+    vehicle = Vehicle.query.get_or_404(vehicle_id)
+    db.session.delete(vehicle)
+    db.session.commit()
+    return jsonify({'message': 'Vehicle deleted successfully'})
