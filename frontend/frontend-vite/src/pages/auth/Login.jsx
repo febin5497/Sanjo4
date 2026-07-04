@@ -5,11 +5,7 @@ import { getActiveFestival } from "../../utils/festival";
 import "../../styles/Login.css";
 // Get dynamic base URL for backend
 const getBaseURL = () => {
-    const host = window.location.hostname;
-    if (host !== 'localhost' && host !== '127.0.0.1') {
-        return `http://${host}:5000`;
-    }
-    return "http://localhost:5000";
+    return "";
 };
 const Login = () => {
     const [form, setForm] = useState({
