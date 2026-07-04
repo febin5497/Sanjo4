@@ -1,0 +1,8 @@
+
+from flask import Blueprint
+
+site_photos_bp = Blueprint('site_photos', __name__)
+
+@site_photos_bp.route('/site_photos')
+def test():
+    return {"module":"site_photos working"}

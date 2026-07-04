@@ -37,8 +37,9 @@ Thumbs.db
 # Instance folder
 instance/
 
-# Uploads
+# Uploads (user data)
 uploads/
 documents/
-site_photos/
 invoices/
+site_photos/uploads/
+site_photos/thumbnails/
