@@ -8,6 +8,7 @@ class MaintenanceLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=False)
     company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)  # Which project site
 
     date = db.Column(db.Date, nullable=False)
     type = db.Column(db.String(100), nullable=False)  # e.g., 'Service', 'Repair', 'Inspection', 'Parts Replacement'
@@ -29,6 +30,7 @@ class MaintenanceLog(db.Model):
             'id': self.id,
             'vehicle_id': self.vehicle_id,
             'company_id': self.company_id,
+            'project_id': self.project_id,
             'date': self.date.strftime('%Y-%m-%d') if self.date else None,
             'type': self.type,
             'cost': self.cost,

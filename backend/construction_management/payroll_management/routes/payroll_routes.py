@@ -112,13 +112,27 @@ def calculate_payroll(cycle_id):
         staff_members = Staff.query.filter_by(company_id=user.company_id).all()
 
         for staff in staff_members:
-            # Get attendance for this month
+            # Get attendance from simple attendance table
             attendance_days = Attendance.query.filter(
                 Attendance.staff_id == staff.id,
                 Attendance.date >= cycle.start_date,
                 Attendance.date <= cycle.end_date,
                 Attendance.status.in_(['present', 'half_day'])
             ).count()
+
+            # Also count photo-based attendance records (approved/completed)
+            try:
+                from attendance_management.models.attendance_record import AttendanceRecord
+                photo_attendance_days = AttendanceRecord.query.filter(
+                    AttendanceRecord.staff_id == staff.id,
+                    AttendanceRecord.date >= cycle.start_date,
+                    AttendanceRecord.date <= cycle.end_date,
+                    AttendanceRecord.status.in_(['approved', 'completed'])
+                ).count()
+                # Use the higher count (avoids double-counting if both exist)
+                attendance_days = max(attendance_days, photo_attendance_days)
+            except Exception:
+                pass  # attendance_records table may not exist yet
 
             # Calculate salary
             monthly_salary = staff.salary or 0
@@ -185,7 +199,7 @@ def get_payroll_records(cycle_id):
 @payroll_bp.route('/cycles/<int:cycle_id>/approve', methods=['POST'])
 @jwt_required()
 def approve_payroll(cycle_id):
-    """Approve payroll cycle"""
+    """Approve payroll cycle and create finance transactions"""
     try:
         current_user_id = get_jwt_identity()
         user = User.query.get(current_user_id)
@@ -197,11 +211,45 @@ def approve_payroll(cycle_id):
         if not cycle:
             return error_response("Cycle not found", 404)
 
+        if cycle.status != 'calculated':
+            return error_response("Only calculated cycles can be approved", 400)
+
         cycle.status = 'approved'
         cycle.approved_by_id = current_user_id
         cycle.approved_at = datetime.utcnow()
 
         db.session.commit()
+
+        # Create CashTransaction for each payroll record (salary expense)
+        try:
+            from finance_management.models.cash_transaction import CashTransaction
+            from staff_management.models import Staff as StaffModel
+
+            records = PayrollRecord.query.filter_by(cycle_id=cycle_id).all()
+            tx_count = 0
+            for record in records:
+                if record.net_salary and record.net_salary > 0:
+                    staff = StaffModel.query.get(record.staff_id)
+                    staff_name = f"{staff.first_name} {staff.last_name}".strip() if staff else "Unknown"
+
+                    cash_tx = CashTransaction(
+                        amount=record.net_salary,
+                        type='expense',
+                        category='Salary',
+                        date=cycle.end_date,
+                        description=f"Salary - {staff_name} - {cycle.month}/{cycle.year}",
+                        staff_id=record.staff_id,
+                        staff_name=staff_name,
+                        created_by=int(current_user_id)
+                    )
+                    db.session.add(cash_tx)
+                    tx_count += 1
+
+            db.session.commit()
+            print(f"Created {tx_count} CashTransaction records for payroll cycle {cycle_id}")
+        except Exception as tx_error:
+            print(f"Warning: Could not create cash transactions for payroll: {str(tx_error)}")
+            db.session.rollback()
 
         log_entity_action(
             user_id=current_user_id,
@@ -210,6 +258,30 @@ def approve_payroll(cycle_id):
             action='approve',
             description=f'Approved payroll cycle {cycle_id}'
         )
+
+        # Notify all staff members in the payroll cycle
+        try:
+            from notifications.models import Notification
+            from staff_management.models import Staff as StaffModel
+            records = PayrollRecord.query.filter_by(cycle_id=cycle_id).all()
+            for record in records:
+                staff = StaffModel.query.get(record.staff_id)
+                if staff and staff.user_id:
+                    notif = Notification(
+                        user_id=staff.user_id,
+                        company_id=user.company_id,
+                        title='Salary Approved',
+                        message=f'Your salary for {cycle.month}/{cycle.year} has been approved. Net pay: Rs.{record.net_salary:.2f}',
+                        notification_type='payroll',
+                        related_model='payroll',
+                        related_id=record.id
+                    )
+                    db.session.add(notif)
+            db.session.commit()
+            print(f"[NOTIFICATION] Payroll notifications sent for cycle #{cycle_id}")
+        except Exception as e:
+            print(f"[NOTIFICATION ERROR] Could not send payroll notifications: {str(e)}")
+            db.session.rollback()
 
         return success_response(cycle.to_dict(), "Payroll approved")
 

@@ -14,6 +14,7 @@ export const AuthProvider = ({ children }) => {
             userToken: action.payload.token,
             user: action.payload.user,
             isLoading: false,
+            passwordChangeRequired: action.payload.passwordChangeRequired || false,
           };
         case 'SIGN_IN':
           return {
@@ -22,6 +23,7 @@ export const AuthProvider = ({ children }) => {
             userToken: action.payload.token,
             user: action.payload.user,
             userRole: action.payload.user.role,
+            passwordChangeRequired: action.payload.passwordChangeRequired || false,
           };
         case 'SIGN_OUT':
           return {
@@ -30,6 +32,12 @@ export const AuthProvider = ({ children }) => {
             userToken: null,
             user: null,
             userRole: null,
+            passwordChangeRequired: false,
+          };
+        case 'PASSWORD_CHANGED':
+          return {
+            ...prevState,
+            passwordChangeRequired: false,
           };
         case 'SET_USER':
           return {
@@ -52,6 +60,7 @@ export const AuthProvider = ({ children }) => {
       userToken: null,
       user: null,
       userRole: null,
+      passwordChangeRequired: false,
     }
   );
 
@@ -71,18 +80,21 @@ export const AuthProvider = ({ children }) => {
     const bootstrapAsync = async () => {
       let userToken;
       let user = null;
+      let passwordChangeRequired = false;
       try {
         userToken = await SecureStore.getItemAsync('auth_token');
         const storedUser = await SecureStore.getItemAsync('user_data');
         if (storedUser) {
           user = JSON.parse(storedUser);
         }
+        const pcr = await SecureStore.getItemAsync('password_change_required');
+        passwordChangeRequired = pcr === 'true';
       } catch (e) {
         // Restoring token failed
         console.log('Failed to restore token:', e);
       }
 
-      dispatch({ type: 'RESTORE_TOKEN', payload: { token: userToken, user } });
+      dispatch({ type: 'RESTORE_TOKEN', payload: { token: userToken, user, passwordChangeRequired } });
     };
 
     bootstrapAsync();
@@ -98,11 +110,13 @@ export const AuthProvider = ({ children }) => {
         if (response.access_token && response.user) {
           const token = response.access_token;
           const user = response.user;
+          const passwordChangeRequired = user.password_change_required || false;
 
           // Store token and user data securely
           await SecureStore.setItemAsync('auth_token', token);
           await SecureStore.setItemAsync('user_id', user.id.toString());
           await SecureStore.setItemAsync('user_data', JSON.stringify(user));
+          await SecureStore.setItemAsync('password_change_required', passwordChangeRequired.toString());
           if (user.staff_id) {
             await SecureStore.setItemAsync('staff_id', user.staff_id.toString());
           }
@@ -112,10 +126,10 @@ export const AuthProvider = ({ children }) => {
 
           dispatch({
             type: 'SIGN_IN',
-            payload: { token, user },
+            payload: { token, user, passwordChangeRequired },
           });
 
-          return { success: true, user };
+          return { success: true, user, passwordChangeRequired };
         } else if (response.error) {
           return { success: false, error: response.error };
         } else {
@@ -138,11 +152,28 @@ export const AuthProvider = ({ children }) => {
         await SecureStore.deleteItemAsync('staff_id');
         await SecureStore.deleteItemAsync('user_data');
         await SecureStore.deleteItemAsync('user_role');
+        await SecureStore.deleteItemAsync('password_change_required');
         dispatch({ type: 'SIGN_OUT' });
       } catch (error) {
         console.log('Logout error:', error);
       } finally {
         dispatch({ type: 'SET_LOADING', payload: false });
+      }
+    },
+
+    changePassword: async (oldPassword, newPassword) => {
+      try {
+        const response = await authAPI.changePassword(oldPassword, newPassword);
+        if (response.success) {
+          await SecureStore.setItemAsync('password_change_required', 'false');
+          dispatch({ type: 'PASSWORD_CHANGED' });
+          return { success: true };
+        } else {
+          return { success: false, error: response.error || 'Failed to change password' };
+        }
+      } catch (error) {
+        const errorMessage = error.response?.data?.error || error.message || 'Password change failed';
+        return { success: false, error: errorMessage };
       }
     },
 

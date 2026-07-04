@@ -206,7 +206,8 @@ def create_attendance():
             present=data.get('present', False),
             half_day=data.get('half_day', False),
             night_shift=data.get('night_shift', False),
-            overtime_hours=float(data.get('overtime_hours', 0))
+            overtime_hours=float(data.get('overtime_hours', 0)),
+            project_id=data.get('project_id')
         )
 
         db.session.add(attendance)
@@ -421,7 +422,8 @@ def bulk_mark_attendance():
                     present=record.get('present', False),
                     half_day=record.get('half_day', False),
                     night_shift=record.get('night_shift', False),
-                    overtime_hours=float(record.get('overtime_hours', 0))
+                    overtime_hours=float(record.get('overtime_hours', 0)),
+                    project_id=record.get('project_id')
                 )
                 db.session.add(attendance)
                 created += 1

@@ -61,14 +61,16 @@ def punch_in_photo():
         latitude = request.form.get('latitude')
         longitude = request.form.get('longitude')
         location_accuracy = request.form.get('location_accuracy')
+        project_id = request.form.get('project_id')
 
         # Convert to float if provided
         try:
             latitude = float(latitude) if latitude else None
             longitude = float(longitude) if longitude else None
             location_accuracy = float(location_accuracy) if location_accuracy else None
+            project_id = int(project_id) if project_id else None
         except ValueError:
-            return jsonify({'success': False, 'error': 'Invalid location coordinates'}), 400
+            return jsonify({'success': False, 'error': 'Invalid location coordinates or project_id'}), 400
 
         # Save photo with location data and audit fields
         result = PhotoService.save_photo(
@@ -99,6 +101,7 @@ def punch_in_photo():
                 punch_in_photo_id=photo_id,
                 status='pending',
                 date=today,
+                project_id=project_id,
                 created_by_id=current_user_id,
                 updated_by_id=current_user_id,
                 company_id=user.company_id,
@@ -108,6 +111,7 @@ def punch_in_photo():
             attendance_record.punch_in_type = 'photo'
             attendance_record.punch_in_photo_id = photo_id
             attendance_record.status = 'pending'
+            attendance_record.project_id = project_id
             attendance_record.updated_by_id = current_user_id
 
         db.session.commit()

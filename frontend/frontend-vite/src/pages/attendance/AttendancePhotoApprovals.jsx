@@ -1,31 +1,47 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import api from '../../api/api';
 import { useToast } from '../../components/Toast';
 import '../../styles/AttendancePhotoApprovals.css';
-import { FaCheck, FaTimes, FaSpinner, FaCamera, FaCalendar, FaUser } from 'react-icons/fa';
+import {
+  FaCheck,
+  FaTimes,
+  FaSpinner,
+  FaCamera,
+  FaCalendar,
+  FaUser,
+  FaMapMarkerAlt,
+  FaClock,
+  FaShieldAlt,
+  FaExclamationTriangle,
+  FaImage,
+  FaSyncAlt,
+  FaChevronLeft,
+  FaInfoCircle,
+} from 'react-icons/fa';
+
 export default function AttendancePhotoApprovals() {
   const location = useLocation();
   const { showSuccess, showError } = useToast();
   const [photos, setPhotos] = useState([]);
-  const [allPhotos, setAllPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
   const [stats, setStats] = useState({
     pending: 0,
     approved_today: 0,
     rejected_today: 0,
     total_processed: 0,
   });
-  // Reset dropdown and filter state on page navigation
+
   useEffect(() => {
     setFilter('pending');
     setSelectedPhoto(null);
     setRejectionReason('');
   }, [location.pathname]);
-  // Cleanup on component unmount
+
   useEffect(() => {
     return () => {
       setFilter('pending');
@@ -33,56 +49,60 @@ export default function AttendancePhotoApprovals() {
       setRejectionReason('');
     };
   }, []);
+
   useEffect(() => {
     loadPendingPhotos();
   }, [filter]);
+
   const loadPendingPhotos = async () => {
     try {
       setLoading(true);
       const response = await api.get('/api/attendance/approvals/pending');
-      // Handle paginated response from BaseResourceRouter
-      // API can return: { data: [...] } or { pending: [...] } or [...]
-      const photosData = response.data?.data || response.data?.pending || response.data || [];
-      if (Array.isArray(photosData) && photosData.length > 0) {
+      const photosData =
+        response.data?.data || response.data?.pending || response.data || [];
+      if (Array.isArray(photosData)) {
         setPhotos(photosData);
-        setAllPhotos(photosData);
-        // Calculate statistics
         const today = new Date().toDateString();
-        const pendingCount = photosData.filter((p) => p.approval_status === 'pending').length;
+        const pendingCount = photosData.filter(
+          (p) => p.approval_status === 'pending'
+        ).length;
         const approvedToday = photosData.filter(
-          (p) => p.approval_status === 'approved' && new Date(p.timestamp_submitted).toDateString() === today
+          (p) =>
+            p.approval_status === 'approved' &&
+            new Date(p.timestamp_submitted).toDateString() === today
         ).length;
         const rejectedToday = photosData.filter(
-          (p) => p.approval_status === 'rejected' && new Date(p.timestamp_submitted).toDateString() === today
+          (p) =>
+            p.approval_status === 'rejected' &&
+            new Date(p.timestamp_submitted).toDateString() === today
         ).length;
-        const totalProcessed = approvedToday + rejectedToday;
         setStats({
           pending: pendingCount,
           approved_today: approvedToday,
           rejected_today: rejectedToday,
-          total_processed: totalProcessed,
-        });
-      } else if (Array.isArray(photosData)) {
-        setPhotos([]);
-        setAllPhotos([]);
-        setStats({
-          pending: 0,
-          approved_today: 0,
-          rejected_today: 0,
-          total_processed: 0,
+          total_processed: approvedToday + rejectedToday,
         });
       } else {
-        showError('Failed to load photos: unexpected response format');
+        setPhotos([]);
+        setStats({ pending: 0, approved_today: 0, rejected_today: 0, total_processed: 0 });
       }
     } catch (error) {
-      showError('Failed to load pending photos: ' + (error.response?.data?.error || error.message));
+      showError(
+        'Failed to load pending photos: ' +
+          (error.response?.data?.error || error.message)
+      );
     } finally {
       setLoading(false);
     }
   };
+
   const approvePhoto = async (photoId) => {
     try {
-      const response = await api.post(`/api/attendance/approvals/${photoId}/approve`, {});
+      setActionLoading(true);
+      const response = await api.post(
+        `/api/attendance/approvals/${photoId}/approve`,
+        {}
+      );
       if (response.data.success) {
         showSuccess('Photo approved successfully');
         loadPendingPhotos();
@@ -90,17 +110,22 @@ export default function AttendancePhotoApprovals() {
       }
     } catch (error) {
       showError('Failed to approve photo');
+    } finally {
+      setActionLoading(false);
     }
   };
+
   const rejectPhoto = async (photoId) => {
     if (!rejectionReason.trim()) {
       showError('Please provide a rejection reason');
       return;
     }
     try {
-      const response = await api.post(`/api/attendance/approvals/${photoId}/reject`, {
-        rejection_reason: rejectionReason,
-      });
+      setActionLoading(true);
+      const response = await api.post(
+        `/api/attendance/approvals/${photoId}/reject`,
+        { rejection_reason: rejectionReason }
+      );
       if (response.data.success) {
         showSuccess('Photo rejected successfully');
         loadPendingPhotos();
@@ -109,247 +134,446 @@ export default function AttendancePhotoApprovals() {
       }
     } catch (error) {
       showError('Failed to reject photo');
+    } finally {
+      setActionLoading(false);
     }
   };
+
   const getPhotoUrl = (photoId) => {
     const base = api.defaults.baseURL?.replace(/\/+$/, '') || '';
     const token = localStorage.getItem('token') || '';
     return `${base}/api/attendance/photos/${photoId}?token=${encodeURIComponent(token)}`;
   };
+
+  const formatTime = (ts) => {
+    if (!ts) return 'N/A';
+    const d = new Date(ts);
+    return d.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const formatFullTime = (ts) => {
+    if (!ts) return 'N/A';
+    return new Date(ts).toLocaleString('en-US', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
+  const getInitials = (name) => {
+    if (!name) return '?';
+    return name
+      .split(' ')
+      .map((w) => w[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   if (loading) {
     return (
-      <div className="approval-container">
-        <div className="loading">
-          <FaSpinner className="spinner" />
-          <p>Loading pending photos...</p>
+      <div className="apa-container">
+        <div className="apa-loading">
+          <div className="apa-loading-spinner">
+            <FaSyncAlt className="apa-spin-icon" />
+          </div>
+          <p className="apa-loading-text">Loading attendance photos...</p>
         </div>
       </div>
     );
   }
+
   return (
-    <div className="approval-container">
-      {/* Dashboard Section */}
-      <div className="approval-dashboard">
-        <div className="dashboard-grid">
-          {/* Pending Approvals Card */}
-          <div className="dashboard-card pending-card">
-            <div className="card-icon">⏳</div>
-            <div className="card-content">
-              <div className="card-number">{stats.pending}</div>
-              <div className="card-label">Pending Approvals</div>
-              <div className="card-description">Waiting for review</div>
-            </div>
+    <div className="apa-container">
+      {/* Page Header */}
+      <div className="apa-page-header">
+        <div className="apa-header-content">
+          <h1 className="apa-page-title">
+            <FaCamera className="apa-title-icon" />
+            Attendance Photo Approvals
+          </h1>
+          <p className="apa-page-subtitle">
+            Review and approve staff attendance verification photos
+          </p>
+        </div>
+        <button className="apa-refresh-btn" onClick={loadPendingPhotos} title="Refresh">
+          <FaSyncAlt />
+        </button>
+      </div>
+
+      {/* Stats Row */}
+      <div className="apa-stats-row">
+        <div className="apa-stat-card apa-stat-pending">
+          <div className="apa-stat-icon-wrap">
+            <FaClock />
           </div>
-          {/* Approved Today Card */}
-          <div className="dashboard-card approved-card">
-            <div className="card-icon">✅</div>
-            <div className="card-content">
-              <div className="card-number">{stats.approved_today}</div>
-              <div className="card-label">Approved Today</div>
-              <div className="card-description">Successful approvals</div>
-            </div>
+          <div className="apa-stat-body">
+            <span className="apa-stat-value">{stats.pending}</span>
+            <span className="apa-stat-label">Pending</span>
           </div>
-          {/* Rejected Today Card */}
-          <div className="dashboard-card rejected-card">
-            <div className="card-icon">❌</div>
-            <div className="card-content">
-              <div className="card-number">{stats.rejected_today}</div>
-              <div className="card-label">Rejected Today</div>
-              <div className="card-description">Need resubmission</div>
-            </div>
+        </div>
+        <div className="apa-stat-card apa-stat-approved">
+          <div className="apa-stat-icon-wrap">
+            <FaCheck />
           </div>
-          {/* Total Processed Card */}
-          <div className="dashboard-card processed-card">
-            <div className="card-icon">📊</div>
-            <div className="card-content">
-              <div className="card-number">{stats.total_processed}</div>
-              <div className="card-label">Total Processed</div>
-              <div className="card-description">Approved + Rejected</div>
-            </div>
+          <div className="apa-stat-body">
+            <span className="apa-stat-value">{stats.approved_today}</span>
+            <span className="apa-stat-label">Approved Today</span>
+          </div>
+        </div>
+        <div className="apa-stat-card apa-stat-rejected">
+          <div className="apa-stat-icon-wrap">
+            <FaTimes />
+          </div>
+          <div className="apa-stat-body">
+            <span className="apa-stat-value">{stats.rejected_today}</span>
+            <span className="apa-stat-label">Rejected Today</span>
+          </div>
+        </div>
+        <div className="apa-stat-card apa-stat-total">
+          <div className="apa-stat-icon-wrap">
+            <FaInfoCircle />
+          </div>
+          <div className="apa-stat-body">
+            <span className="apa-stat-value">{stats.total_processed}</span>
+            <span className="apa-stat-label">Total Processed</span>
           </div>
         </div>
       </div>
+
+      {/* Filter Tabs */}
+      <div className="apa-filter-bar">
+        <div className="apa-filter-tabs">
+          {[
+            { key: 'pending', label: 'Pending', icon: FaClock },
+            { key: 'approved', label: 'Approved', icon: FaCheck },
+            { key: 'rejected', label: 'Rejected', icon: FaTimes },
+            { key: 'all', label: 'All', icon: FaInfoCircle },
+          ].map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              className={`apa-filter-tab ${filter === key ? 'active' : ''}`}
+              onClick={() => setFilter(key)}
+            >
+              <Icon size={12} />
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Photo Grid */}
       {photos.length === 0 ? (
-        <div className="no-photos">
-          <FaCamera size={48} />
-          <p>No pending photos for approval</p>
+        <div className="apa-empty-state">
+          <div className="apa-empty-icon">
+            <FaCamera />
+          </div>
+          <h3>No photos found</h3>
+          <p>
+            {filter === 'pending'
+              ? 'No pending attendance photos awaiting review.'
+              : `No ${filter} photos to display.`}
+          </p>
         </div>
       ) : (
-        <div className="photos-grid">
+        <div className="apa-photo-grid">
           {photos.map((photo) => (
             <div
               key={photo.id}
-              className="photo-card"
-              onClick={() => setSelectedPhoto(photo)}
+              className="apa-photo-card"
+              onClick={() => {
+                setSelectedPhoto(photo);
+                setRejectionReason('');
+              }}
             >
-              <div className="photo-image">
+              <div className="apa-photo-thumb">
                 <img
                   src={getPhotoUrl(photo.id)}
-                  alt="Attendance Photo"
+                  alt="Attendance"
+                  loading="lazy"
                   onError={(e) => {
-                    e.target.src = 'https://via.placeholder.com/200?text=Photo';
+                    e.target.src =
+                      'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect fill="%23e2e8f0" width="200" height="200"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%23a0aec0" font-size="14" font-family="sans-serif">No Image</text></svg>';
                   }}
                 />
-                <div className="photo-badge">Pending</div>
+                <span
+                  className={`apa-status-chip apa-status-${photo.approval_status}`}
+                >
+                  {photo.approval_status}
+                </span>
               </div>
-              <div className="photo-info">
-                <p className="staff-name">
-                  <FaUser size={14} /> {photo.staff_name || 'Unknown'}
-                </p>
-                <p className="timestamp">
-                  <FaCalendar size={14} /> {new Date(photo.timestamp_captured).toLocaleString()}
-                </p>
+              <div className="apa-photo-meta">
+                <div className="apa-meta-staff">
+                  <div className="apa-avatar-sm">
+                    {getInitials(photo.staff_name)}
+                  </div>
+                  <div className="apa-meta-text">
+                    <span className="apa-meta-name">
+                      {photo.staff_name || 'Unknown'}
+                    </span>
+                    <span className="apa-meta-time">
+                      <FaClock size={10} />
+                      {formatTime(photo.timestamp_captured)}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Review Modal */}
       {selectedPhoto && (
-        <div className="modal-overlay" onClick={() => setSelectedPhoto(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <button className="close-btn" onClick={() => setSelectedPhoto(null)}>
-              ×
-            </button>
-            <div className="modal-header">
-              <h2>Review Photo</h2>
-              <p className="staff-info">
-                {selectedPhoto.staff_name} • {new Date(selectedPhoto.timestamp_captured).toLocaleString()}
-              </p>
+        <div
+          className="apa-modal-overlay"
+          onClick={() => setSelectedPhoto(null)}
+        >
+          <div className="apa-modal" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Top Bar */}
+            <div className="apa-modal-topbar">
+              <button
+                className="apa-modal-back"
+                onClick={() => setSelectedPhoto(null)}
+              >
+                <FaChevronLeft /> Back
+              </button>
+              <span className="apa-modal-id">#{selectedPhoto.id}</span>
             </div>
-            <div className="modal-body">
-              <div className="photo-display">
-                <img
-                  src={getPhotoUrl(selectedPhoto.id)}
-                  alt="Attendance Photo"
-                  onError={(e) => {
-                    e.target.src = 'https://via.placeholder.com/400?text=Photo';
-                  }}
-                />
+
+            {/* Modal Photo Section */}
+            <div className="apa-modal-photo">
+              <img
+                src={getPhotoUrl(selectedPhoto.id)}
+                alt="Attendance Photo"
+                onError={(e) => {
+                  e.target.src =
+                    'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400"><rect fill="%23e2e8f0" width="600" height="400"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%23a0aec0" font-size="18" font-family="sans-serif">Photo Unavailable</text></svg>';
+                }}
+              />
+              <span
+                className={`apa-modal-badge apa-status-${selectedPhoto.approval_status}`}
+              >
+                {selectedPhoto.approval_status === 'pending' && (
+                  <FaExclamationTriangle size={11} />
+                )}
+                {selectedPhoto.approval_status === 'approved' && (
+                  <FaCheck size={11} />
+                )}
+                {selectedPhoto.approval_status === 'rejected' && (
+                  <FaTimes size={11} />
+                )}
+                {selectedPhoto.approval_status}
+              </span>
+            </div>
+
+            {/* Modal Details */}
+            <div className="apa-modal-details">
+              {/* Staff Info */}
+              <div className="apa-detail-block">
+                <div className="apa-detail-header">
+                  <FaUser className="apa-detail-icon" />
+                  <span>Staff Information</span>
+                </div>
+                <div className="apa-detail-grid">
+                  <div className="apa-detail-item">
+                    <span className="apa-detail-key">Name</span>
+                    <span className="apa-detail-val">
+                      {selectedPhoto.staff_name}
+                    </span>
+                  </div>
+                  <div className="apa-detail-item">
+                    <span className="apa-detail-key">Staff ID</span>
+                    <span className="apa-detail-val">
+                      {selectedPhoto.staff_id}
+                    </span>
+                  </div>
+                  <div className="apa-detail-item">
+                    <span className="apa-detail-key">Role</span>
+                    <span className="apa-detail-val">
+                      {selectedPhoto.staff_role}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="details-sections">
-                <div className="details-grid">
-                  <div className="details-group">
-                    <div className="details-group-title">🕐 Timestamp</div>
-                    <div className="detail-row">
-                      <span className="detail-label">Captured:</span>
-                      <span>{new Date(selectedPhoto.timestamp_captured).toLocaleString()}</span>
+
+              {/* Timestamp Info */}
+              <div className="apa-detail-block">
+                <div className="apa-detail-header">
+                  <FaClock className="apa-detail-icon" />
+                  <span>Timestamp</span>
+                </div>
+                <div className="apa-detail-grid">
+                  <div className="apa-detail-item">
+                    <span className="apa-detail-key">Captured</span>
+                    <span className="apa-detail-val">
+                      {formatFullTime(selectedPhoto.timestamp_captured)}
+                    </span>
+                  </div>
+                  <div className="apa-detail-item">
+                    <span className="apa-detail-key">Submitted</span>
+                    <span className="apa-detail-val">
+                      {formatFullTime(selectedPhoto.timestamp_submitted)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Location Info */}
+              <div className="apa-detail-block">
+                <div className="apa-detail-header">
+                  <FaMapMarkerAlt className="apa-detail-icon" />
+                  <span>Location</span>
+                </div>
+                {selectedPhoto.latitude || selectedPhoto.longitude ? (
+                  <div className="apa-detail-grid">
+                    <div className="apa-detail-item">
+                      <span className="apa-detail-key">Latitude</span>
+                      <span className="apa-detail-val apa-mono">
+                        {selectedPhoto.latitude?.toFixed(6)}
+                      </span>
                     </div>
-                    <div className="detail-row">
-                      <span className="detail-label">Submitted:</span>
-                      <span>{new Date(selectedPhoto.timestamp_submitted).toLocaleString()}</span>
+                    <div className="apa-detail-item">
+                      <span className="apa-detail-key">Longitude</span>
+                      <span className="apa-detail-val apa-mono">
+                        {selectedPhoto.longitude?.toFixed(6)}
+                      </span>
+                    </div>
+                    {selectedPhoto.location_accuracy && (
+                      <div className="apa-detail-item">
+                        <span className="apa-detail-key">Accuracy</span>
+                        <span className="apa-detail-val apa-mono">
+                          {selectedPhoto.location_accuracy?.toFixed(1)}m
+                        </span>
+                      </div>
+                    )}
+                    <div className="apa-detail-item apa-map-link">
+                      <a
+                        href={`https://maps.google.com/?q=${selectedPhoto.latitude},${selectedPhoto.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <FaMapMarkerAlt /> View on Google Maps
+                      </a>
                     </div>
                   </div>
-                  <div className="details-group">
-                    <div className="details-group-title">👤 Staff Information</div>
-                    <div className="detail-row">
-                      <span className="detail-label">Staff ID:</span>
-                      <span>{selectedPhoto.staff_id}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="detail-label">Name:</span>
-                      <span>{selectedPhoto.staff_name}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="detail-label">Role:</span>
-                      <span>{selectedPhoto.staff_role}</span>
-                    </div>
+                ) : (
+                  <div className="apa-detail-empty">
+                    No location data available
                   </div>
-                  <div className="details-group">
-                    <div className="details-group-title">📍 Location</div>
-                    {(selectedPhoto.latitude || selectedPhoto.longitude) ? (
-                      <>
-                        <div className="detail-row">
-                          <span className="detail-label">Latitude:</span>
-                          <span className="location-value">{selectedPhoto.latitude?.toFixed(6)}</span>
-                        </div>
-                        <div className="detail-row">
-                          <span className="detail-label">Longitude:</span>
-                          <span className="location-value">{selectedPhoto.longitude?.toFixed(6)}</span>
-                        </div>
-                        <div className="detail-row">
-                          <span className="detail-label">Accuracy:</span>
-                          <span className="location-value">{selectedPhoto.location_accuracy?.toFixed(2)}m</span>
-                        </div>
-                        <div className="detail-row">
-                          <span className="detail-label">Map:</span>
-                          <span className="location-link">
-                            <a
-                              href={`https://maps.google.com/?q=${selectedPhoto.latitude},${selectedPhoto.longitude}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              View on Map 🗺️
-                            </a>
-                          </span>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="detail-row">
-                        <span className="detail-label">Location:</span>
-                        <span className="text-muted">Not available</span>
+                )}
+              </div>
+
+              {/* Status Info */}
+              {selectedPhoto.approval_status !== 'pending' && (
+                <div className="apa-detail-block">
+                  <div className="apa-detail-header">
+                    <FaShieldAlt className="apa-detail-icon" />
+                    <span>Review Details</span>
+                  </div>
+                  <div className="apa-detail-grid">
+                    {selectedPhoto.approved_by && (
+                      <div className="apa-detail-item">
+                        <span className="apa-detail-key">Approved By</span>
+                        <span className="apa-detail-val">
+                          Staff {selectedPhoto.approved_by}
+                        </span>
+                      </div>
+                    )}
+                    {selectedPhoto.approved_at && (
+                      <div className="apa-detail-item">
+                        <span className="apa-detail-key">Approved At</span>
+                        <span className="apa-detail-val">
+                          {formatFullTime(selectedPhoto.approved_at)}
+                        </span>
+                      </div>
+                    )}
+                    {selectedPhoto.rejected_by && (
+                      <div className="apa-detail-item">
+                        <span className="apa-detail-key">Rejected By</span>
+                        <span className="apa-detail-val">
+                          Staff {selectedPhoto.rejected_by}
+                        </span>
+                      </div>
+                    )}
+                    {selectedPhoto.rejected_at && (
+                      <div className="apa-detail-item">
+                        <span className="apa-detail-key">Rejected At</span>
+                        <span className="apa-detail-val">
+                          {formatFullTime(selectedPhoto.rejected_at)}
+                        </span>
+                      </div>
+                    )}
+                    {selectedPhoto.rejection_reason && (
+                      <div className="apa-detail-item apa-full-width">
+                        <span className="apa-detail-key">Rejection Reason</span>
+                        <span className="apa-detail-val apa-reason-text">
+                          {selectedPhoto.rejection_reason}
+                        </span>
                       </div>
                     )}
                   </div>
-                  <div className="details-group">
-                    <div className="details-group-title">⏳ Status Information</div>
-                    <div className="detail-row">
-                      <span className="detail-label">Approval Status:</span>
-                      <span>
-                        <span className={`status-badge ${selectedPhoto.approval_status === 'pending' ? 'pending' : selectedPhoto.approval_status === 'approved' ? 'approved' : 'rejected'}`}>{selectedPhoto.approval_status}</span>
-                      </span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="detail-label">Approved By:</span>
-                      <span>{selectedPhoto.approved_by ? `Staff ${selectedPhoto.approved_by}` : 'N/A'}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="detail-label">Approved At:</span>
-                      <span>{selectedPhoto.approved_at ? new Date(selectedPhoto.approved_at).toLocaleString() : 'N/A'}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="detail-label">Rejected By:</span>
-                      <span>{selectedPhoto.rejected_by ? `Staff ${selectedPhoto.rejected_by}` : 'N/A'}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="detail-label">Rejected At:</span>
-                      <span>{selectedPhoto.rejected_at ? new Date(selectedPhoto.rejected_at).toLocaleString() : 'N/A'}</span>
-                    </div>
-                  </div>
                 </div>
-                <div className="rejection-section">
-                  <div className="rejection-section-header">
-                    <h4>📝 Rejection Details</h4>
-                  </div>
-                  <div className="rejection-form">
-                    <label className="form-label">Rejection Reason *</label>
-                    <textarea
-                      className="form-textarea"
-                      value={rejectionReason}
-                      onChange={(e) => setRejectionReason(e.target.value)}
-                      placeholder="Please provide a detailed reason for rejecting this attendance photo. Explain what was not acceptable and suggest how to correct it..."
-                      rows={4}
-                      required
-                    />
-                  </div>
-                </div>
+              )}
+            </div>
+
+            {/* Rejection Form (only for pending) */}
+            {selectedPhoto.approval_status === 'pending' && (
+              <div className="apa-rejection-area">
+                <label className="apa-rejection-label">
+                  Rejection Reason
+                  <span className="apa-rejection-hint">
+                    (required if rejecting)
+                  </span>
+                </label>
+                <textarea
+                  className="apa-rejection-input"
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Enter reason for rejection..."
+                  rows={3}
+                />
               </div>
-            </div>
-            <div className="modal-footer">
-              <button
-                className="btn btn-reject"
-                onClick={() => rejectPhoto(selectedPhoto.id)}
-                disabled={loading}
-              >
-                <FaTimes /> Reject
-              </button>
-              <button
-                className="btn btn-approve"
-                onClick={() => approvePhoto(selectedPhoto.id)}
-                disabled={loading}
-              >
-                <FaCheck /> Approve
-              </button>
-            </div>
+            )}
+
+            {/* Modal Actions */}
+            {selectedPhoto.approval_status === 'pending' && (
+              <div className="apa-modal-actions">
+                <button
+                  className="apa-btn apa-btn-reject"
+                  onClick={() => rejectPhoto(selectedPhoto.id)}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? (
+                    <FaSpinner className="apa-spin-icon" />
+                  ) : (
+                    <FaTimes />
+                  )}
+                  Reject
+                </button>
+                <button
+                  className="apa-btn apa-btn-approve"
+                  onClick={() => approvePhoto(selectedPhoto.id)}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? (
+                    <FaSpinner className="apa-spin-icon" />
+                  ) : (
+                    <FaCheck />
+                  )}
+                  Approve
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

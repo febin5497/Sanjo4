@@ -570,6 +570,7 @@ def create_maintenance_log(vehicle_id):
         maintenance_log = MaintenanceLog(
             vehicle_id=vehicle_id,
             company_id=user.company_id,
+            project_id=data.get('project_id'),
             date=parse_date(data.get("date")),
             type=data.get("type"),
             cost=float(data.get("cost")),

@@ -13,21 +13,18 @@ from datetime import datetime
 class UserCreationService:
     """Service for automatically creating user accounts for staff"""
 
+    DEFAULT_PASSWORD = "Erp@123"
+
     @staticmethod
     def generate_password(length=12):
         """
-        Generate a secure random password
-
-        Args:
-            length (int): Length of password to generate (default: 12)
+        Return the default password for all new users.
+        Users are required to change this on first login.
 
         Returns:
-            str: A random password
+            str: The default password
         """
-        # Use a combination of uppercase, lowercase, digits, and special characters
-        characters = string.ascii_letters + string.digits + "!@#$%^&*-_"
-        password = ''.join(secrets.choice(characters) for _ in range(length))
-        return password
+        return UserCreationService.DEFAULT_PASSWORD
 
     @staticmethod
     def create_user_for_staff(staff_data, company_id):
@@ -162,7 +159,8 @@ class UserCreationService:
     @staticmethod
     def reset_user_password(staff):
         """
-        Reset a staff member's user password (when account is recreated)
+        Reset a staff member's user password to the default.
+        User must change on next login.
 
         Args:
             staff: Staff object
@@ -173,7 +171,7 @@ class UserCreationService:
         try:
             user = UserCreationService.get_user_for_staff(staff)
             if user:
-                new_password = UserCreationService.generate_password()
+                new_password = UserCreationService.DEFAULT_PASSWORD
                 user.set_password(new_password)
                 user.password_change_required = True
                 db.session.add(user)

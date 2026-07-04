@@ -66,6 +66,14 @@ export const authAPI = {
     return apiClient.post('/api/auth/logout');
   },
 
+  changePassword: async (oldPassword, newPassword) => {
+    const response = await apiClient.post('/api/auth/change-password', {
+      old_password: oldPassword,
+      new_password: newPassword,
+    });
+    return response.data;
+  },
+
   getCurrentUser: async () => {
     const response = await apiClient.get('/api/auth/me');
     return response.data;
@@ -74,7 +82,7 @@ export const authAPI = {
 
 // ==================== ATTENDANCE ENDPOINTS ====================
 export const attendanceAPI = {
-  punchIn: async (staffId, photoPath, location = null) => {
+  punchIn: async (staffId, photoPath, location = null, projectId = null) => {
     try {
       const formData = new FormData();
 
@@ -85,12 +93,18 @@ export const attendanceAPI = {
       console.log('Punch In - Photo Path:', photoPath);
       console.log('Punch In - Timestamp:', timestamp);
       console.log('Punch In - Location:', location);
+      console.log('Punch In - Project ID:', projectId);
 
       // Add location if available
       if (location) {
         formData.append('latitude', String(location.latitude));
         formData.append('longitude', String(location.longitude));
         formData.append('location_accuracy', String(location.accuracy || 0));
+      }
+
+      // Add project_id if provided
+      if (projectId) {
+        formData.append('project_id', String(projectId));
       }
 
       // Add photo file - for React Native/Expo, use URI directly
@@ -281,20 +295,16 @@ export const tasksAPI = {
 };
 
 // ==================== NOTIFICATIONS ENDPOINTS ====================
+// Use the dedicated notifications service from notifications.js
+import notificationsService from './notifications';
 export const notificationsAPI = {
-  registerDevice: async (staffId, fcmToken, deviceName) => {
-    const response = await apiClient.post('/api/notifications/register', {
-      staff_id: staffId,
-      fcm_token: fcmToken,
-      device_name: deviceName,
-    });
-    return response.data;
-  },
-
-  getNotifications: async () => {
-    const response = await apiClient.get('/api/notifications');
-    return response.data;
-  },
+  getNotifications: notificationsService.getNotifications,
+  getUnreadCount: notificationsService.getUnreadCount,
+  markAsRead: notificationsService.markAsRead,
+  markAllAsRead: notificationsService.markAllAsRead,
+  deleteNotification: notificationsService.deleteNotification,
+  clearAll: notificationsService.clearAll,
+  registerDevice: notificationsService.registerFCMToken,
 };
 
 export default apiClient;

@@ -1,11 +1,12 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet, Platform, TouchableOpacity, Alert } from 'react-native';
 import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 
 import { LoginScreen } from '../screens/LoginScreen';
+import { ChangePasswordScreen } from '../screens/ChangePasswordScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { AttendanceScreen } from '../screens/AttendanceScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -14,8 +15,10 @@ import { TeamScreen } from '../screens/TeamScreen';
 import { VehiclesScreen } from '../screens/VehiclesScreen';
 import { ExpensesScreen } from '../screens/ExpensesScreen';
 import { ApprovalsScreen } from '../screens/ApprovalsScreen';
+import NotificationScreen from '../screens/NotificationScreen';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useNotifications } from '../context/NotificationContext';
 import { Colors, GlassTokens } from '../theme';
 
 const Stack = createStackNavigator();
@@ -69,6 +72,41 @@ const ApprovalsStack = () => (
     <Stack.Screen name="ApprovalsTab" component={ApprovalsScreen} />
   </Stack.Navigator>
 );
+
+const NotificationsStack = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="NotificationsTab" component={NotificationScreen} />
+  </Stack.Navigator>
+);
+
+/**
+ * Notification bell icon with unread badge
+ */
+const NotificationBell = ({ themeColors }) => {
+  const { unreadCount } = useNotifications();
+  const navigation = useNavigation();
+
+  return (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('Notifications')}
+      style={tabBarStyles.bellContainer}
+      activeOpacity={0.7}
+    >
+      <MaterialCommunityIcons
+        name="bell-outline"
+        size={24}
+        color={themeColors.text.primary}
+      />
+      {unreadCount > 0 && (
+        <View style={[tabBarStyles.badge, { backgroundColor: themeColors.icon.danger }]}>
+          <Text style={tabBarStyles.badgeText}>
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+};
 
 /**
  * Custom glass tab bar component with curved top and active indicators
@@ -160,6 +198,10 @@ const GlassTabBar = ({ state, descriptors, navigation, themeColors }) => {
               </View>
             );
           })}
+          {/* Notification bell */}
+          <View style={tabBarStyles.bellOuterContainer}>
+            <NotificationBell themeColors={themeColors} />
+          </View>
           {/* Logout button */}
           <View style={tabBarStyles.logoutContainer}>
             <TouchableOpacity onPress={handleLogout} activeOpacity={0.6} style={tabBarStyles.logoutButton}>
@@ -246,6 +288,37 @@ const tabBarStyles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  bellOuterContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingLeft: 4,
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(0,0,0,0.06)',
+    marginLeft: 4,
+  },
+  bellContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
 });
 
 /**
@@ -284,6 +357,18 @@ const getRoleBasedTabs = (userRole, themeColors) => {
 
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="check-circle" size={size} color={color} />
+          ),
+        },
+      },
+      // Notifications tab (all roles)
+      {
+        name: 'Notifications',
+        component: NotificationsStack,
+        options: {
+          title: 'Notifications',
+          tabBarLabel: 'Notifications',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="bell" size={size} color={color} />
           ),
         },
       },
@@ -337,6 +422,18 @@ const getRoleBasedTabs = (userRole, themeColors) => {
           ),
         },
       },
+      // Notifications tab for drivers
+      {
+        name: 'Notifications',
+        component: NotificationsStack,
+        options: {
+          title: 'Notifications',
+          tabBarLabel: 'Notifications',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="bell" size={size} color={color} />
+          ),
+        },
+      },
       {
         name: 'Profile',
         component: ProfileStack,
@@ -382,6 +479,18 @@ const getRoleBasedTabs = (userRole, themeColors) => {
 
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="check-circle" size={size} color={color} />
+          ),
+        },
+      },
+      // Notifications tab for engineers
+      {
+        name: 'Notifications',
+        component: NotificationsStack,
+        options: {
+          title: 'Notifications',
+          tabBarLabel: 'Notifications',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="bell" size={size} color={color} />
           ),
         },
       },
@@ -433,6 +542,18 @@ const getRoleBasedTabs = (userRole, themeColors) => {
           ),
         },
       },
+      // Notifications tab for HR
+      {
+        name: 'Notifications',
+        component: NotificationsStack,
+        options: {
+          title: 'Notifications',
+          tabBarLabel: 'Notifications',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="bell" size={size} color={color} />
+          ),
+        },
+      },
       {
         name: 'Profile',
         component: ProfileStack,
@@ -478,6 +599,18 @@ const getRoleBasedTabs = (userRole, themeColors) => {
           tabBarLabel: 'Team',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="account-multiple" size={size} color={color} />
+          ),
+        },
+      },
+      // Notifications tab for managers
+      {
+        name: 'Notifications',
+        component: NotificationsStack,
+        options: {
+          title: 'Notifications',
+          tabBarLabel: 'Notifications',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="bell" size={size} color={color} />
           ),
         },
       },
@@ -527,6 +660,18 @@ const getRoleBasedTabs = (userRole, themeColors) => {
           ),
         },
       },
+      // Notifications tab for admin
+      {
+        name: 'Notifications',
+        component: NotificationsStack,
+        options: {
+          title: 'Notifications',
+          tabBarLabel: 'Notifications',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons name="bell" size={size} color={color} />
+          ),
+        },
+      },
       {
         name: 'Profile',
         component: ProfileStack,
@@ -562,6 +707,16 @@ const RootNavigator = () => {
           }}
         >
           <Stack.Screen name="Login" component={LoginScreen} />
+        </Stack.Navigator>
+      ) : state.passwordChangeRequired ? (
+        // Force password change before accessing the app
+        <Stack.Navigator
+          screenOptions={{
+            headerShown: false,
+            animationEnabled: false,
+          }}
+        >
+          <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
         </Stack.Navigator>
       ) : (
         // Authenticated app with role-based tabs

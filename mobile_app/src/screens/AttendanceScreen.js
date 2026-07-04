@@ -18,6 +18,7 @@ import * as Location from 'expo-location';
 import { CameraModal } from '../components/CameraModal';
 import { attendanceAPI } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
+import { useProject } from '../context/ProjectContext';
 import { Colors, GlobalStyles, GlassTokens, Gradients } from '../theme';
 
 const { width } = Dimensions.get('window');
@@ -241,6 +242,7 @@ const getDynamicStyles = (colors) => {
 
 export const AttendanceScreen = () => {
   const { colors, isDarkMode } = useTheme();
+  const { selectedProject } = useProject();
   const dynamicStyles = getDynamicStyles(colors);
   const [staffId, setStaffId] = useState(null);
   const [currentStatus, setCurrentStatus] = useState(null);
@@ -467,7 +469,7 @@ export const AttendanceScreen = () => {
           return;
         }
 
-        const response = await attendanceAPI.punchIn(staffId, photoData.uri, photoData.location);
+        const response = await attendanceAPI.punchIn(staffId, photoData.uri, photoData.location, selectedProject?.id);
 
         if (response.data?.success || response.success) {
           Alert.alert('Success', 'Punched in successfully with location tracking');

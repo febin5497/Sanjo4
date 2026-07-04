@@ -3,6 +3,24 @@ from extensions import db
 from attendance_management.models import AttendancePhoto, Attendance, AttendanceRecord
 
 
+def _create_notification(user_id, company_id, title, message, notification_type, related_model=None, related_id=None):
+    """Helper to create in-app notification"""
+    try:
+        from notifications.models import Notification
+        notification = Notification(
+            user_id=user_id,
+            company_id=company_id,
+            title=title,
+            message=message,
+            notification_type=notification_type,
+            related_model=related_model,
+            related_id=related_id
+        )
+        db.session.add(notification)
+    except Exception as e:
+        print(f"Warning: Could not create notification: {str(e)}")
+
+
 class ApprovalService:
     """Service for managing attendance photo approval workflow"""
 
@@ -64,6 +82,28 @@ class ApprovalService:
 
             db.session.commit()
 
+            # Create notification for the staff member
+            try:
+                from notifications.models import Notification
+                from user_management.models import User
+                staff_user = User.query.filter_by(id=photo.staff.user_id).first() if photo.staff else None
+                if staff_user:
+                    notif = Notification(
+                        user_id=staff_user.id,
+                        company_id=staff_user.company_id,
+                        title='Attendance Approved',
+                        message=f'Your attendance for {photo.timestamp_captured.date().isoformat()} has been approved.',
+                        notification_type='attendance',
+                        related_model='attendance',
+                        related_id=attendance_record.id
+                    )
+                    db.session.add(notif)
+                    db.session.commit()
+                    print(f"[NOTIFICATION] Attendance approval notification sent to user #{staff_user.id}")
+            except Exception as e:
+                print(f"[NOTIFICATION ERROR] Could not send attendance approval notification: {str(e)}")
+                db.session.rollback()
+
             return {
                 'success': True,
                 'message': 'Photo approved',
@@ -112,6 +152,28 @@ class ApprovalService:
                 attendance_record.status = 'rejected'
 
             db.session.commit()
+
+            # Create notification for the staff member
+            try:
+                from notifications.models import Notification
+                from user_management.models import User
+                staff_user = User.query.filter_by(id=photo.staff.user_id).first() if photo.staff else None
+                if staff_user:
+                    notif = Notification(
+                        user_id=staff_user.id,
+                        company_id=staff_user.company_id,
+                        title='Attendance Rejected',
+                        message=f'Your attendance for {photo.timestamp_captured.date().isoformat()} was rejected. Reason: {rejection_reason}',
+                        notification_type='attendance',
+                        related_model='attendance',
+                        related_id=photo_id
+                    )
+                    db.session.add(notif)
+                    db.session.commit()
+                    print(f"[NOTIFICATION] Attendance rejection notification sent to user #{staff_user.id}")
+            except Exception as e:
+                print(f"[NOTIFICATION ERROR] Could not send attendance rejection notification: {str(e)}")
+                db.session.rollback()
 
             return {
                 'success': True,

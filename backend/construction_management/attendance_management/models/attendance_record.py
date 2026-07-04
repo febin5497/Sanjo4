@@ -11,6 +11,7 @@ class AttendanceRecord(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)  # Which project site
 
     # Timestamps
     punch_in_time = db.Column(db.DateTime)
@@ -44,6 +45,7 @@ class AttendanceRecord(db.Model):
             'staff_id': self.staff_id,
             'staff_name': self.staff.name if self.staff else None,
             'staff_role': self.staff.role if self.staff else None,
+            'project_id': self.project_id,
             'punch_in_time': self.punch_in_time.isoformat() if self.punch_in_time else None,
             'punch_out_time': self.punch_out_time.isoformat() if self.punch_out_time else None,
             'date': self.date.isoformat() if self.date else None,

@@ -391,67 +391,65 @@ def create_staff():
             # Status
             status='Active',
             photo=data.get('photo'),
-            needs_user_access=data.get('needs_user_access', False),  # Default to False
-            user_created_at=datetime.utcnow() if data.get('needs_user_access', False) else None
+            needs_user_access=True,
+            user_created_at=datetime.utcnow()
         )
 
         db.session.add(staff)
         db.session.flush()  # Get the staff ID without committing
 
-        # Create user account only if requested
+        # Always create user account for new staff
         user_info = None
-        if data.get('needs_user_access', False):
-            # Use the new User Creation Service
-            user, generated_user_id, default_password = UserCreationService.create_user_for_staff(
-                {
-                    'first_name': staff.first_name,
-                    'last_name': staff.last_name,
-                    'personal_email': staff.personal_email,
-                    'role': staff.role
-                },
-                current_user.company_id
-            )
+        user, generated_user_id, default_password = UserCreationService.create_user_for_staff(
+            {
+                'first_name': staff.first_name,
+                'last_name': staff.last_name,
+                'personal_email': staff.personal_email,
+                'role': staff.role
+            },
+            current_user.company_id
+        )
 
-            if user:
-                db.session.add(user)
-                db.session.flush()  # Get the user ID
+        if user:
+            db.session.add(user)
+            db.session.flush()  # Get the user ID
 
-                # Link staff to user
-                staff.user_id = user.id
-                staff.needs_user_access = True
+            # Link staff to user
+            staff.user_id = user.id
+            staff.needs_user_access = True
 
-                user_info = {
-                    "user_id": generated_user_id,
-                    "username": generated_user_id,
-                    "default_password": default_password,
-                    "password_change_required": True,
-                    "message": "User account created with User ID. Employee must login and change password on first access."
-                }
+            user_info = {
+                "user_id": generated_user_id,
+                "username": generated_user_id,
+                "default_password": default_password,
+                "password_change_required": True,
+                "message": "User account created. Default password: Erp@123 — must change on first login."
+            }
 
-                # Send welcome email with credentials
-                if staff.personal_email:
-                    from utils.email_utils import send_welcome_email
-                    from company_settings.models import Company
-                    employee_full_name = f"{staff.first_name} {staff.last_name}".strip()
-                    company = Company.query.get(current_user.company_id)
-                    company_name = company.name if company else "Construction Management System"
+            # Send welcome email with credentials
+            if staff.personal_email:
+                from utils.email_utils import send_welcome_email
+                from company_settings.models import Company
+                employee_full_name = f"{staff.first_name} {staff.last_name}".strip()
+                company = Company.query.get(current_user.company_id)
+                company_name = company.name if company else "Construction Management System"
 
-                    email_sent = send_welcome_email(
-                        employee_email=staff.personal_email,
-                        employee_name=employee_full_name,
-                        username=generated_user_id,
-                        password=default_password,
-                        company_name=company_name
-                    )
+                email_sent = send_welcome_email(
+                    employee_email=staff.personal_email,
+                    employee_name=employee_full_name,
+                    username=generated_user_id,
+                    password=default_password,
+                    company_name=company_name
+                )
 
-                    user_info["email_sent"] = email_sent
-                    if email_sent:
-                        print(f"✅ Welcome email sent to {staff.personal_email}")
-                    else:
-                        print(f"⚠️ Failed to send welcome email to {staff.personal_email}")
-            else:
-                # Log error if user creation fails
-                print(f"Warning: Failed to create user account for staff {staff.staff_id}")
+                user_info["email_sent"] = email_sent
+                if email_sent:
+                    print(f"✅ Welcome email sent to {staff.personal_email}")
+                else:
+                    print(f"⚠️ Failed to send welcome email to {staff.personal_email}")
+        else:
+            # Log error if user creation fails
+            print(f"Warning: Failed to create user account for staff {staff.staff_id}")
 
         db.session.commit()
 
@@ -470,6 +468,25 @@ def create_staff():
             ip_address=ip_address,
             user_agent=user_agent
         )
+
+        # Notify admin about new staff creation
+        try:
+            from notifications.models import Notification
+            notif = Notification(
+                user_id=int(current_user_id),
+                company_id=current_user.company_id,
+                title='New Staff Added',
+                message=f'{staff.first_name} {staff.last_name} ({staff.role}) has been added to the team.',
+                notification_type='staff',
+                related_model='staff',
+                related_id=staff.id
+            )
+            db.session.add(notif)
+            db.session.commit()
+            print(f"[NOTIFICATION] Staff creation notification sent to user #{current_user_id}")
+        except Exception as e:
+            print(f"[NOTIFICATION ERROR] Could not send staff creation notification: {str(e)}")
+            db.session.rollback()
 
         response_data = staff.to_dict()
         if user_info:
@@ -1205,6 +1222,28 @@ def approve_expense(expense_id):
             user_agent=user_agent
         )
 
+        # Notify staff member about expense approval
+        try:
+            from notifications.models import Notification
+            if expense.staff_id:
+                expense_staff = Staff.query.get(expense.staff_id)
+                if expense_staff and expense_staff.user_id:
+                    notif = Notification(
+                        user_id=expense_staff.user_id,
+                        company_id=user.company_id,
+                        title='Expense Approved',
+                        message=f'Your {expense.category} expense of Rs.{expense.amount:.2f} has been approved.',
+                        notification_type='expense',
+                        related_model='expense',
+                        related_id=expense.id
+                    )
+                    db.session.add(notif)
+                    db.session.commit()
+                    print(f"[NOTIFICATION] Expense approval notification sent to user #{expense_staff.user_id}")
+        except Exception as e:
+            print(f"[NOTIFICATION ERROR] Could not send expense approval notification: {str(e)}")
+            db.session.rollback()
+
         return success_response(expense.to_dict(), approval_message)
 
     except Exception as e:
@@ -1269,6 +1308,28 @@ def reject_expense(expense_id):
             user_agent=user_agent
         )
 
+        # Notify staff member about expense rejection
+        try:
+            from notifications.models import Notification
+            if expense.staff_id:
+                expense_staff = Staff.query.get(expense.staff_id)
+                if expense_staff and expense_staff.user_id:
+                    notif = Notification(
+                        user_id=expense_staff.user_id,
+                        company_id=user.company_id,
+                        title='Expense Rejected',
+                        message=f'Your {expense.category} expense of Rs.{expense.amount:.2f} was rejected. Reason: {rejection_reason}',
+                        notification_type='expense',
+                        related_model='expense',
+                        related_id=expense.id
+                    )
+                    db.session.add(notif)
+                    db.session.commit()
+                    print(f"[NOTIFICATION] Expense rejection notification sent to user #{expense_staff.user_id}")
+        except Exception as e:
+            print(f"[NOTIFICATION ERROR] Could not send expense rejection notification: {str(e)}")
+            db.session.rollback()
+
         return success_response(expense.to_dict(), f"Expense rejected successfully. Reason: {rejection_reason}")
 
     except Exception as e:
@@ -1322,9 +1383,11 @@ def delete_expense(expense_id):
 @staff_bp.route('/expenses/batch/approve', methods=['POST'], strict_slashes=False)
 @jwt_required()
 def batch_approve_expenses():
-    """Approve multiple expenses"""
+    """Approve multiple expenses and create finance transactions"""
     try:
         from admin_management.utils.activity_logger import log_entity_action
+        from finance_management.models.cash_transaction import CashTransaction
+        from project_management.models.models import Project
 
         current_user_id = get_jwt_identity()
         user = User.query.get(int(current_user_id))
@@ -1337,6 +1400,9 @@ def batch_approve_expenses():
         if not expense_ids or not isinstance(expense_ids, list):
             return error_response("Invalid expense_ids provided", status_code=400)
 
+        # Fetch expenses before updating (to get details for CashTransaction)
+        expenses = Expense.query.filter(Expense.id.in_(expense_ids)).all()
+
         # Update all expenses to Approved
         Expense.query.filter(Expense.id.in_(expense_ids)).update(
             {
@@ -1347,6 +1413,35 @@ def batch_approve_expenses():
             synchronize_session=False
         )
         db.session.commit()
+
+        # Create CashTransaction for each approved expense
+        tx_count = 0
+        for expense in expenses:
+            try:
+                staff = Staff.query.get(expense.staff_id) if expense.staff_id else None
+                project = Project.query.get(expense.project_id) if expense.project_id else None
+                staff_name = f"{staff.first_name} {staff.last_name}".strip() if staff else "Unknown"
+                project_name = project.name if project else "Unknown"
+
+                cash_tx = CashTransaction(
+                    amount=expense.amount,
+                    type='expense',
+                    category=expense.category,
+                    date=expense.expense_date,
+                    description=f"{expense.category} - {expense.description}",
+                    project_id=expense.project_id,
+                    project_name=project_name,
+                    staff_id=expense.staff_id,
+                    staff_name=staff_name,
+                    created_by=int(current_user_id)
+                )
+                db.session.add(cash_tx)
+                tx_count += 1
+            except Exception as tx_error:
+                print(f"Warning: Could not create cash transaction for expense {expense.id}: {str(tx_error)}")
+
+        db.session.commit()
+        print(f"Created {tx_count} CashTransaction records for batch-approved expenses")
 
         # Log activity
         ip_address = request.remote_addr or request.headers.get('X-Forwarded-For', '').split(',')[0]
@@ -1499,6 +1594,32 @@ def create_expense_mobile():
             ip_address=ip_address,
             user_agent=user_agent
         )
+
+        # Notify admin/manager/finance about new expense
+        try:
+            from notifications.models import Notification
+            from user_management.models import User as UserModel
+            admin_users = UserModel.query.filter(
+                UserModel.company_id == current_user.company_id,
+                UserModel.role.in_(['admin', 'manager', 'finance']),
+                UserModel.is_active == True
+            ).all()
+            for admin in admin_users:
+                notif = Notification(
+                    user_id=admin.id,
+                    company_id=current_user.company_id,
+                    title='New Expense Submitted',
+                    message=f'{current_user.username} submitted a {expense.category} expense of Rs.{expense.amount:.2f} for approval.',
+                    notification_type='expense',
+                    related_model='expense',
+                    related_id=expense.id
+                )
+                db.session.add(notif)
+            db.session.commit()
+            print(f"[NOTIFICATION] Created {len(admin_users)} notifications for expense #{expense.id}")
+        except Exception as e:
+            print(f"[NOTIFICATION ERROR] Could not send expense notification: {str(e)}")
+            db.session.rollback()
 
         return success_response(expense.to_dict(), "Expense created successfully", status_code=201)
 

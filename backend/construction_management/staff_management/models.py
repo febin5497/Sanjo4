@@ -110,7 +110,7 @@ class Staff(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
 
     # User access settings
-    needs_user_access = db.Column(db.Boolean, default=False)  # Whether this staff needs login access
+    needs_user_access = db.Column(db.Boolean, default=True)  # Auto-create user account for login
     user_created_at = db.Column(db.DateTime, nullable=True)  # When the user account was created
 
     # Audit fields

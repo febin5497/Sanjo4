@@ -34,7 +34,7 @@ export default function Staff() {
         pf: "",
         esi: "",
         photo: "",
-        needs_user_access: false,
+        needs_user_access: true,
         username: "",
         project_ids: []
     })
@@ -122,7 +122,7 @@ export default function Staff() {
             pf: "",
             esi: "",
             photo: "",
-            needs_user_access: false,
+        needs_user_access: true,
             username: "",
             project_ids: []
         })
@@ -142,7 +142,7 @@ export default function Staff() {
             pf: staffMember.pf_percentage || staffMember.pf || "",
             esi: staffMember.esi_percentage || staffMember.esi || "",
             photo: staffMember.photo || "",
-            needs_user_access: staffMember.needs_user_access || false,
+            needs_user_access: staffMember.needs_user_access !== undefined ? staffMember.needs_user_access : true,
             username: staffMember.username || "",
             project_ids: staffMember.project_assignments?.map(a => a.project_id) || []
         })
@@ -194,7 +194,14 @@ export default function Staff() {
                     setShowModal(false)
                     setCurrentPage(1)
                     loadStaff()
-                    showSuccess("Staff member created successfully")
+                    const userInfo = res.data.data?.user_info
+                    if (userInfo) {
+                        showSuccess(
+                            `Staff created! Username: ${userInfo.username} | Password: Erp@123 (must change on first login)`
+                        )
+                    } else {
+                        showSuccess("Staff member created successfully")
+                    }
                 } else {
                     setFormErrors(res.data.errors || [res.data.error])
                 }
@@ -583,41 +590,27 @@ export default function Staff() {
                                     />
                                 </div>
                             </div>
-                            {/* User Account Section */}
+                            {/* User Account Section - Auto-created */}
                             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                <div className="flex items-center gap-3 mb-3">
-                                    <input
-                                        type="checkbox"
-                                        id="needsUserAccess"
-                                        name="needs_user_access"
-                                        checked={formData.needs_user_access}
-                                        onChange={handleInputChange}
-                                        className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                                    />
-                                    <label htmlFor="needsUserAccess" className="text-gray-700 font-semibold">
-                                        Create User Account for Login
-                                    </label>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <span className="text-blue-600 text-lg">🔐</span>
+                                    <span className="text-gray-700 font-semibold">User Account (Auto-created)</span>
                                 </div>
                                 <p className="text-gray-600 text-sm ml-8 mb-3">
-                                    Enable this to allow this staff member to login to the system with their own account
+                                    A login account will be created automatically for this staff member.
                                 </p>
-                                {/* Username Field */}
-                                {formData.needs_user_access && (
-                                    <div className="ml-8">
-                                        <label className="block text-gray-700 font-semibold mb-2">Username</label>
-                                        <input
-                                            type="text"
-                                            name="username"
-                                            value={formData.username}
-                                            onChange={handleInputChange}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            placeholder="Leave blank to auto-generate from email"
-                                        />
-                                        <p className="text-gray-500 text-sm mt-1">
-                                            Default password: Erp@123 (user must change on first login)
-                                        </p>
-                                    </div>
-                                )}
+                                <div className="ml-8 p-3 bg-white rounded-lg border border-blue-100">
+                                    <p className="text-sm text-gray-700">
+                                        <span className="font-semibold">Username:</span> Auto-generated (STF-YYYY-NNN)
+                                    </p>
+                                    <p className="text-sm text-gray-700 mt-1">
+                                        <span className="font-semibold">Default Password:</span> <code className="bg-gray-100 px-2 py-0.5 rounded text-red-600 font-mono">Erp@123</code>
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        ⚠️ User must change password on first login
+                                    </p>
+                                </div>
+                            </div>
                             {/* Project Assignment Section - Hidden */}
                             <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg" style={{display: 'none'}}>
                                 <label className="block text-gray-700 font-semibold mb-3">Assign Projects</label>
@@ -644,7 +637,6 @@ export default function Staff() {
                                         ))}
                                     </div>
                                 )}
-                            </div>
                             </div>
                             {/* Form Actions */}
                             <div className="flex gap-3 pt-4 border-t border-gray-300">
@@ -689,6 +681,21 @@ export default function Staff() {
                                     />
                                 </div>
                             )}
+                            {/* Login Credentials */}
+                            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                <h3 className="text-blue-800 font-semibold text-sm mb-2">🔐 Login Credentials</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div>
+                                        <p className="text-gray-500 text-xs">Username (Staff ID)</p>
+                                        <p className="text-gray-900 font-bold font-mono text-lg">{selectedStaff.staff_id}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-500 text-xs">Default Password</p>
+                                        <p className="text-gray-900 font-mono text-lg"><code className="bg-gray-100 px-2 py-0.5 rounded text-red-600">Erp@123</code></p>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-2">⚠️ User must change password on first login</p>
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <h3 className="text-gray-500 font-semibold text-sm mb-1">Name</h3>

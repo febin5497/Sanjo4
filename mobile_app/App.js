@@ -4,6 +4,7 @@ import { AuthProvider } from './src/context/AuthContext';
 import { ProjectProvider } from './src/context/ProjectContext';
 import { VehicleProvider } from './src/context/VehicleContext';
 import { ThemeProvider } from './src/context/ThemeContext';
+import { NotificationProvider } from './src/context/NotificationContext';
 import RootNavigator from './src/navigation/Navigation';
 
 export default function App() {
@@ -13,7 +14,9 @@ export default function App() {
         <AuthProvider>
           <ProjectProvider>
             <VehicleProvider>
-              <RootNavigator />
+              <NotificationProvider>
+                <RootNavigator />
+              </NotificationProvider>
             </VehicleProvider>
           </ProjectProvider>
         </AuthProvider>

@@ -14,6 +14,7 @@ class Attendance(db.Model, AuditMixin):
     id = db.Column(db.Integer, primary_key=True)
     staff_id = db.Column(db.Integer, db.ForeignKey('staff.id'), nullable=False)
     date = db.Column(db.Date, nullable=False, default=date.today)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)  # Which project site
 
     # Attendance Status Fields (for reporting)
     present = db.Column(db.Boolean, default=False)
@@ -49,6 +50,7 @@ class Attendance(db.Model, AuditMixin):
             "staff_name": self.staff.name if self.staff else None,
             "staff_role": self.staff.role if self.staff else None,
             "date": self.date.isoformat() if self.date else None,
+            "project_id": self.project_id,
             "present": self.present,
             "half_day": self.half_day,
             "night_shift": self.night_shift,
