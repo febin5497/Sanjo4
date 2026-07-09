@@ -190,10 +190,11 @@ export default function Dashboard() {
   }, [])
 
   const metrics = useMemo(() => {
-    const { projects, staff, vehicles, ti, te, mr, bu, bt, ea, et, txs, logs, cats, attendance, attStatsData = {}, expenses, pendingExpenses, totalPendingExpenses, invoices, paidInvoices, pendingInvoices, totalPendingInvoiceAmt, maintenanceDue, totalFuel, cashFlowData } = raw
+    const { projects, staff, vehicles, ti, te, mr, bu, bt, ea, et, txs, logs, cats, attendance, attStatsData = {}, expenses, pendingExpenses, totalPendingExpenses, invoices, paidInvoices, pendingInvoices, totalPendingInvoiceAmt, maintenanceDue, totalFuel, cashFlowData } = raw || {}
+    if (!projects && !staff && !vehicles) return { count: 0, activeStaff: 0, totalStaff: 0, ti: 0, te: 0, mr: 0, balance: 0, margin: "0.0", bpct: 0, avgProgress: 0, resourcePct: 0, revPct: 0, featured: null, projects: [], txs: [], logs: [], cats: [], bu: 0, bt: 0, activeVehicles: 0, totalVehicles: 0, maintDueCount: 0, totalFuel: 0, presentToday: 0, pendingApprovals: 0, pendingExpenses: [], totalPendingExpenses: 0, paidInvoices: 0, pendingInvoices: [], totalPendingInvoiceAmt: 0, cashFlowData: [] }
     const count = n(projects?.length)
-    const activeStaff = staff?.filter(s => s.status !== 'inactive').length || 0
-    const totalStaff = staff?.length || 0
+    const activeStaff = (staff || []).filter(s => s.status !== 'inactive').length
+    const totalStaff = (staff || []).length
     const balance = ti - te
     const margin = ti > 0 ? ((balance / ti) * 100).toFixed(1) : "0.0"
     const bpct = bt > 0 ? Math.round((bu / bt) * 100) : 0
@@ -205,15 +206,15 @@ export default function Dashboard() {
     const revPct = Math.min(monthlyTarget, 100)
     const featured = projects?.[0] || null
 
-    const activeVehicles = vehicles?.filter(v => v.status === 'active' || !v.status).length || 0
-    const totalVehicles = vehicles?.length || 0
-    const maintDueCount = maintenanceDue?.length || 0
+    const activeVehicles = (vehicles || []).filter(v => v.status === 'active' || !v.status).length
+    const totalVehicles = (vehicles || []).length
+    const maintDueCount = (maintenanceDue || []).length
 
-    const todayAtt = attendance?.filter(a => {
+    const todayAtt = (attendance || []).filter(a => {
       const d = new Date(a.date || a.created_at)
       const today = new Date()
       return d.toDateString() === today.toDateString()
-    }).length || 0
+    }).length
     const presentToday = attStatsData.approved || attStatsData.today_present || todayAtt
     const pendingApprovals = attStatsData.pending || 0
 
