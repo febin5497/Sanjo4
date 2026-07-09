@@ -125,7 +125,7 @@ function App() {
                 }}
             >
 
-                <div className="flex-1 p-4" style={{minHeight: 0, overflow: isDashboard ? "hidden" : "auto", overflowX: "auto"}}>
+                <div className="flex-1" style={{minHeight: 0, overflow: isDashboard ? "hidden" : "auto", overflowX: "auto"}}>
 
                     <Routes>
 
