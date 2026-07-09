@@ -61,7 +61,7 @@ body {
 
 .main-content {
   flex-grow: 1;
-  margin-left: 280px;
+  margin-left: 0;
   padding: 0;
   background: var(--bg-page);
   height: 100vh;

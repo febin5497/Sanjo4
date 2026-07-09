@@ -172,11 +172,10 @@ export default function TopNavigation() {
         <div className="nav-menu">
           <Link
             to="/dashboard"
-            className={`nav-link ${isActive("/dashboard") ? "active" : ""}`}
+            className={`nav-link home-link ${isActive("/dashboard") ? "active" : ""}`}
             title="Dashboard"
           >
             <FaHome size={16} />
-            <span className="nav-text">Dashboard</span>
           </Link>
 
           {menuSections.map((section, idx) => (

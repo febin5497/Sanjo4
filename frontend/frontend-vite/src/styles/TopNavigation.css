@@ -94,6 +94,13 @@
   flex-shrink: 0;
 }
 
+.nav-link.home-link {
+  padding: 6px 10px;
+  margin-right: 4px;
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  padding-right: 12px;
+}
+
 .nav-link:hover {
   background: rgba(0, 82, 204, 0.2);
   color: white;
