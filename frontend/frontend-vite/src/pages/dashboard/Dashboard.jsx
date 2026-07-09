@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import api from "../../api/api"
+import axios from "axios"
 import { useToast } from "../../components/Toast"
 import "../../styles/Dashboard.css"
 
@@ -145,18 +146,20 @@ export default function Dashboard() {
   useEffect(() => {
     async function load() {
       setLoading(true)
+      const token = localStorage.getItem("token")
+      const hdrs = token ? { Authorization: `Bearer ${token}` } : {}
       const ok = r => r?.data?.success && r?.data?.data
       const ar = r => ok(r) ? (Array.isArray(r.data.data) ? r.data.data : (r.data.data.items || [])) : []
-      const w = p => p.then(r => r).catch(() => ({ data: { success: false, data: null } }))
+      const w = url => axios.get(url, { headers: hdrs, timeout: 8000 }).then(r => r).catch(() => ({ data: { success: false, data: null } }))
       try {
         const [pr, sr, vr, fr, br, er, lr, tr, att, attStats, exp, inv, maint, cashFlow] = await Promise.all([
-          w(api.get('/api/projects?per_page=100')), w(api.get('/api/staff?per_page=100')),
-          w(api.get('/api/vehicles?per_page=100')), w(api.get('/api/finance/summary')),
-          w(api.get('/api/finance/budgets?per_page=50')), w(api.get('/api/equipment/stats')),
-          w(api.get('/api/admin/activity-logs?per_page=10')), w(api.get('/api/finance/transactions?per_page=50')),
-          w(api.get('/api/attendance?per_page=100')), w(api.get('/api/attendance/approvals/stats')),
-          w(api.get('/api/staff/expenses?per_page=50')), w(api.get('/api/finance/invoices?per_page=20')),
-          w(api.get('/api/vehicles/maintenance-due')), w(api.get('/api/finance/reports/cash-flow')),
+          w('/api/projects?per_page=100'), w('/api/staff?per_page=100'),
+          w('/api/vehicles?per_page=100'), w('/api/finance/summary'),
+          w('/api/finance/budgets?per_page=50'), w('/api/equipment/stats'),
+          w('/api/admin/activity-logs?per_page=10'), w('/api/finance/transactions?per_page=50'),
+          w('/api/attendance?per_page=100'), w('/api/attendance/approvals/stats'),
+          w('/api/staff/expenses?per_page=50'), w('/api/finance/invoices?per_page=20'),
+          w('/api/vehicles/maintenance-due'), w('/api/finance/reports/cash-flow'),
         ])
         const projects = ar(pr), staff = ar(sr), vehicles = ar(vr), budgets = ar(br)
         const txs = ar(tr), logs = ar(lr).slice(0, 8)
@@ -167,7 +170,7 @@ export default function Dashboard() {
         if (ok(fr)) { ti = n(fr.data.data.total_income); te = n(fr.data.data.total_expense) }
 
         let mr = 0
-        try { const dr = await api.get('/api/dashboard'); if (ok(dr)) mr = n(dr.data.data.monthlyRevenue) } catch {}
+        try { const dr = await w('/api/dashboard'); if (ok(dr)) mr = n(dr.data.data.monthlyRevenue) } catch {}
 
         let bu = 0, bt = 0
         budgets.forEach(b => { bt += n(b.allocated_amount || b.budget_amount); bu += n(b.used_amount) })
@@ -177,7 +180,7 @@ export default function Dashboard() {
 
         let cats = []
         try {
-          const all = await api.get('/api/finance/transactions?per_page=500')
+          const all = await w('/api/finance/transactions?per_page=500')
           const a = ar(all); const m = {}
           a.forEach(x => { const c = x.category || 'Other'; m[c] = (m[c] || 0) + Math.abs(n(x.amount)) })
           cats = Object.entries(m).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 6)
@@ -247,7 +250,7 @@ export default function Dashboard() {
         const projDist = Object.entries(projStatus).map(([name, value]) => ({ name, value }))
 
         setRaw({ projects, staff, vehicles, ti, te, mr, bu, bt, ea, et, txs: txs.slice(0, 6), logs, cats, attendance, attStatsData, expenses, pendingExpenses, totalPendingExpenses, invoices, paidInvoices, pendingInvoices, totalPendingInvoiceAmt, maintenanceDue, totalFuel, cashFlowData, expenseTrend, incomeTrend, staffByRole, attPie, revData, projDist })
-      } catch { showError('Failed to load') }
+      } catch { setRaw({}); showError('Failed to load') }
       setLoading(false)
     }
     load()
