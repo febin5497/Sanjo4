@@ -6,7 +6,10 @@ import "../../styles/Dashboard.css"
 
 const BLUE = "#3B82F6"
 const ORANGE = "#F59E0B"
-const COLORS = [BLUE, "#10B981", ORANGE, "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899"]
+const GREEN = "#10B981"
+const RED = "#EF4444"
+const PURPLE = "#8B5CF6"
+const COLORS = [BLUE, GREEN, ORANGE, RED, PURPLE, "#06B6D4", "#EC4899"]
 
 function n(v) { return v ?? 0 }
 
@@ -50,9 +53,19 @@ function Avatar({ name, color }) {
   return <div className="av" style={{ background: color || BLUE }}>{init}</div>
 }
 
+function StatMini({ icon, value, label, color }) {
+  return (
+    <div className="stat-mini">
+      <div className="stat-mini-icon" style={{ background: `${color}12`, color }}>{icon}</div>
+      <div className="stat-mini-val">{value}</div>
+      <div className="stat-mini-lbl">{label}</div>
+    </div>
+  )
+}
+
 function HeroCard({ project, totalIncome, totalExpense, balance, margin }) {
   const p = project || { name: "No projects yet", progress: 0, status: "pending" }
-  const statusColor = p.status === 'active' || p.status === 'in_progress' ? "#10B981" : p.status === 'pending' ? ORANGE : "#94A3B8"
+  const statusColor = p.status === 'active' || p.status === 'in_progress' ? GREEN : p.status === 'pending' ? ORANGE : "#94A3B8"
   const sl = (p.status || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
   return (
     <div className="hero-crd">
@@ -77,7 +90,7 @@ function HeroCard({ project, totalIncome, totalExpense, balance, margin }) {
           <div className="hero-stats">
             <div className="hero-stat"><span className="hero-stat-v">{fmt(totalIncome)}</span><span className="hero-stat-l">Revenue</span></div>
             <div className="hero-stat"><span className="hero-stat-v">{fmt(totalExpense)}</span><span className="hero-stat-l">Expenses</span></div>
-            <div className="hero-stat"><span className="hero-stat-v" style={{ color: balance >= 0 ? "#10B981" : "#EF4444" }}>{fmt(balance)}</span><span className="hero-stat-l">{margin}% margin</span></div>
+            <div className="hero-stat"><span className="hero-stat-v" style={{ color: balance >= 0 ? GREEN : RED }}>{fmt(balance)}</span><span className="hero-stat-l">{margin}% margin</span></div>
           </div>
         </div>
         <div className="hero-btm">
@@ -116,17 +129,22 @@ export default function Dashboard() {
     async function load() {
       setLoading(true)
       const ok = r => r?.data?.success && r?.data?.data
-      const ar = r => ok(r) ? (Array.isArray(r.data.data) ? r.data.data : []) : []
+      const ar = r => ok(r) ? (Array.isArray(r.data.data) ? r.data.data : (r.data.data.items || [])) : []
       const w = p => p.then(r => r).catch(() => ({ data: { success: false, data: null } }))
       try {
-        const [pr, sr, vr, fr, br, er, lr, tr] = await Promise.all([
+        const [pr, sr, vr, fr, br, er, lr, tr, att, attStats, exp, inv, maint, cashFlow] = await Promise.all([
           w(api.get('/api/projects?per_page=100')), w(api.get('/api/staff?per_page=100')),
           w(api.get('/api/vehicles?per_page=100')), w(api.get('/api/finance/summary')),
           w(api.get('/api/finance/budgets?per_page=50')), w(api.get('/api/equipment/stats')),
           w(api.get('/api/admin/activity-logs?per_page=10')), w(api.get('/api/finance/transactions?per_page=10')),
+          w(api.get('/api/attendance?per_page=100')), w(api.get('/api/attendance/approvals/stats')),
+          w(api.get('/api/staff/expenses?per_page=50')), w(api.get('/api/finance/invoices?per_page=20')),
+          w(api.get('/api/vehicles/maintenance-due')), w(api.get('/api/finance/reports/cash-flow')),
         ])
         const projects = ar(pr), staff = ar(sr), vehicles = ar(vr), budgets = ar(br)
         const txs = ar(tr).slice(0, 6), logs = ar(lr).slice(0, 6)
+        const attendance = ar(att), expenses = ar(exp), invoices = ar(inv)
+        const maintenanceDue = ar(maint)
 
         let ti = 0, te = 0
         if (ok(fr)) { ti = n(fr.data.data.total_income); te = n(fr.data.data.total_expense) }
@@ -148,7 +166,23 @@ export default function Dashboard() {
           cats = Object.entries(m).map(([n, v]) => ({ name: n, value: v })).sort((a, b) => b.value - a.value).slice(0, 6)
         } catch {}
 
-        setRaw({ projects, staff, vehicles, ti, te, mr, bu, bt, ea, et, txs, logs, cats })
+        let attStatsData = {}
+        if (ok(attStats)) attStatsData = attStats.data.data || {}
+
+        let totalFuel = 0
+        vehicles.forEach(v => { totalFuel += n(v.fuel_cost || v.total_fuel_cost) })
+
+        let pendingExpenses = expenses.filter(e => e.status === 'pending')
+        let totalPendingExpenses = pendingExpenses.reduce((s, e) => s + n(e.amount), 0)
+
+        let paidInvoices = invoices.filter(i => i.status === 'paid' || i.payment_status === 'paid')
+        let pendingInvoices = invoices.filter(i => i.status !== 'paid' && i.payment_status !== 'paid')
+        let totalPendingInvoiceAmt = pendingInvoices.reduce((s, i) => s + n(i.total_amount || i.amount), 0)
+
+        let cashFlowData = []
+        if (ok(cashFlow)) cashFlowData = Array.isArray(cashFlow.data.data) ? cashFlow.data.data : []
+
+        setRaw({ projects, staff, vehicles, ti, te, mr, bu, bt, ea, et, txs, logs, cats, attendance, attStatsData, expenses, pendingExpenses, totalPendingExpenses, invoices, paidInvoices, pendingInvoices, totalPendingInvoiceAmt, maintenanceDue, totalFuel, cashFlowData })
       } catch { showError('Failed to load') }
       setLoading(false)
     }
@@ -156,9 +190,10 @@ export default function Dashboard() {
   }, [])
 
   const metrics = useMemo(() => {
-    const { projects, staff, vehicles, ti, te, mr, bu, bt, ea, et, txs, logs, cats } = raw
+    const { projects, staff, vehicles, ti, te, mr, bu, bt, ea, et, txs, logs, cats, attendance, attStatsData = {}, expenses, pendingExpenses, totalPendingExpenses, invoices, paidInvoices, pendingInvoices, totalPendingInvoiceAmt, maintenanceDue, totalFuel, cashFlowData } = raw
     const count = n(projects?.length)
     const activeStaff = staff?.filter(s => s.status !== 'inactive').length || 0
+    const totalStaff = staff?.length || 0
     const balance = ti - te
     const margin = ti > 0 ? ((balance / ti) * 100).toFixed(1) : "0.0"
     const bpct = bt > 0 ? Math.round((bu / bt) * 100) : 0
@@ -169,7 +204,20 @@ export default function Dashboard() {
     const monthlyTarget = ti > 0 && ti / 12 > 0 ? Math.round((mr / (ti / 12)) * 100) : 0
     const revPct = Math.min(monthlyTarget, 100)
     const featured = projects?.[0] || null
-    return { count, activeStaff, ti, te, mr, balance, margin, bpct, avgProgress, resourcePct, revPct, featured, projects: projects?.slice(0, 4) || [], txs, logs, cats, bu, bt }
+
+    const activeVehicles = vehicles?.filter(v => v.status === 'active' || !v.status).length || 0
+    const totalVehicles = vehicles?.length || 0
+    const maintDueCount = maintenanceDue?.length || 0
+
+    const todayAtt = attendance?.filter(a => {
+      const d = new Date(a.date || a.created_at)
+      const today = new Date()
+      return d.toDateString() === today.toDateString()
+    }).length || 0
+    const presentToday = attStatsData.approved || attStatsData.today_present || todayAtt
+    const pendingApprovals = attStatsData.pending || 0
+
+    return { count, activeStaff, totalStaff, ti, te, mr, balance, margin, bpct, avgProgress, resourcePct, revPct, featured, projects: projects?.slice(0, 4) || [], txs, logs, cats, bu, bt, activeVehicles, totalVehicles, maintDueCount, totalFuel, presentToday, pendingApprovals, pendingExpenses: pendingExpenses?.slice(0, 5) || [], totalPendingExpenses, paidInvoices: paidInvoices?.length || 0, pendingInvoices: pendingInvoices?.slice(0, 5) || [], totalPendingInvoiceAmt, cashFlowData }
   }, [raw])
 
   if (loading) return (
@@ -178,11 +226,12 @@ export default function Dashboard() {
     </div>
   )
 
-  const { count, ti, te, mr, balance, margin, bpct, avgProgress, resourcePct, revPct, featured, projects, txs, logs, cats, bu, bt } = metrics
+  const { count, activeStaff, totalStaff, ti, te, mr, balance, margin, bpct, avgProgress, resourcePct, revPct, featured, projects, txs, logs, cats, bu, bt, activeVehicles, totalVehicles, maintDueCount, totalFuel, presentToday, pendingApprovals, pendingExpenses, totalPendingExpenses, paidInvoices, pendingInvoices, totalPendingInvoiceAmt, cashFlowData } = metrics
 
   return (
     <div className="db">
       <div className="db-inner">
+        {/* Row 1: Hero + Activity */}
         <div className="db-g">
           <div className="col-8">
             <HeroCard project={featured} totalIncome={ti} totalExpense={te} balance={balance} margin={margin} />
@@ -209,27 +258,78 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Row 2: Gauge Cards */}
         <div className="db-g">
           <div className="col-3">
-            <GaugeCard pct={bpct} label="Budget Utilization" sub={`${fmt(bu)} / ${fmt(bt)}`} color={bpct > 80 ? "#EF4444" : BLUE} />
+            <GaugeCard pct={bpct} label="Budget Utilization" sub={`${fmt(bu)} / ${fmt(bt)}`} color={bpct > 80 ? RED : BLUE} />
           </div>
           <div className="col-3">
-            <GaugeCard pct={avgProgress} label="Project Progress" sub={`${count} projects`} color="#10B981" />
+            <GaugeCard pct={avgProgress} label="Project Progress" sub={`${count} projects`} color={GREEN} />
           </div>
           <div className="col-3">
             <GaugeCard pct={resourcePct} label="Resource Allocation" sub="Staff & Equipment" color={ORANGE} />
           </div>
           <div className="col-3">
-            <GaugeCard pct={revPct} label="Revenue Target" sub={`${fmt(mr)} this month`} color="#8B5CF6" />
+            <GaugeCard pct={revPct} label="Revenue Target" sub={`${fmt(mr)} this month`} color={PURPLE} />
           </div>
         </div>
 
+        {/* Row 3: Staff + Vehicle + Finance Summary */}
+        <div className="db-g">
+          <div className="col-4">
+            <div className="acrd">
+              <div className="acrd-h">
+                <span>👥 Staff Overview</span>
+              </div>
+              <div className="acrd-body">
+                <div className="stat-grid">
+                  <StatMini icon="👤" value={totalStaff} label="Total Staff" color={BLUE} />
+                  <StatMini icon="✅" value={presentToday} label="Present Today" color={GREEN} />
+                  <StatMini icon="⏳" value={pendingApprovals} label="Pending Approvals" color={ORANGE} />
+                  <StatMini icon="📊" value={`${activeStaff}`} label="Active Staff" color={PURPLE} />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-4">
+            <div className="acrd">
+              <div className="acrd-h">
+                <span>🚗 Vehicle Status</span>
+              </div>
+              <div className="acrd-body">
+                <div className="stat-grid">
+                  <StatMini icon="🚐" value={activeVehicles} label="Active Vehicles" color={BLUE} />
+                  <StatMini icon="🔧" value={maintDueCount} label="Maintenance Due" color={maintDueCount > 0 ? RED : GREEN} />
+                  <StatMini icon="⛽" value={fmt(totalFuel)} label="Total Fuel Cost" color={ORANGE} />
+                  <StatMini icon="📊" value={totalVehicles} label="Total Fleet" color={PURPLE} />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-4">
+            <div className="acrd">
+              <div className="acrd-h">
+                <span>💰 Finance Summary</span>
+              </div>
+              <div className="acrd-body">
+                <div className="stat-grid">
+                  <StatMini icon="📄" value={paidInvoices} label="Paid Invoices" color={GREEN} />
+                  <StatMini icon="⏳" value={pendingInvoices.length} label="Pending Invoices" color={ORANGE} />
+                  <StatMini icon="💸" value={fmt(totalPendingInvoiceAmt)} label="Outstanding" color={RED} />
+                  <StatMini icon="📊" value={fmt(balance)} label="Net Profit" color={balance >= 0 ? GREEN : RED} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 4: Charts */}
         <div className="db-g">
           <div className="col-6">
             <div className="acrd">
               <div className="acrd-h">
                 <span>Income vs Expenses</span>
-                <span className="acrd-badge" style={{ color: '#10B981', background: '#10B98112' }}>Net {fmt(balance)}</span>
+                <span className="acrd-badge" style={{ color: GREEN, background: '#10B98112' }}>Net {fmt(balance)}</span>
               </div>
               <div className="acrd-body">
                 <ResponsiveContainer width="100%" height={220}>
@@ -247,7 +347,7 @@ export default function Dashboard() {
               <div className="acrd-f">
                 <span><span style={{ color: BLUE }}>●</span> Income: {fmt(ti)}</span>
                 <span><span style={{ color: ORANGE }}>●</span> Expenses: {fmt(te)}</span>
-                <span><span style={{ color: balance >= 0 ? '#10B981' : '#EF4444' }}>●</span> Profit: {fmt(balance)}</span>
+                <span><span style={{ color: balance >= 0 ? GREEN : RED }}>●</span> Profit: {fmt(balance)}</span>
               </div>
             </div>
           </div>
@@ -257,18 +357,18 @@ export default function Dashboard() {
                 <span>Spending by Category</span>
               </div>
               <div className="acrd-body" style={{ display: 'flex', alignItems: 'center' }}>
-                {logs.length > 0 || cats.length > 0 ? (
+                {cats.length > 0 ? (
                   <>
                     <ResponsiveContainer width="55%" height={200}>
                       <PieChart>
-                        <Pie data={cats.length > 0 ? cats : [{ name: 'No Data', value: 1 }]} cx="50%" cy="50%" outerRadius={72} innerRadius={48} paddingAngle={3} dataKey="value">
-                          {cats.length > 0 ? cats.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />) : <Cell fill="#E8EDF2" />}
+                        <Pie data={cats} cx="50%" cy="50%" outerRadius={72} innerRadius={48} paddingAngle={3} dataKey="value">
+                          {cats.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                         </Pie>
                         <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontFamily: 'Inter,system-ui,sans-serif', fontSize: 12 }} formatter={v => [fmt(v), 'Amount']} />
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="pie-legend">
-                      {(cats.length > 0 ? cats : []).map((c, i) => (
+                      {cats.map((c, i) => (
                         <div key={i} className="pl-i"><span style={{ background: COLORS[i % COLORS.length] }} />{c.name}</div>
                       ))}
                     </div>
@@ -279,8 +379,9 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="db-g" style={{ marginBottom: 0 }}>
-          <div className="col-6">
+        {/* Row 5: Transactions + Projects + Pending Expenses */}
+        <div className="db-g">
+          <div className="col-4">
             <div className="acrd">
               <div className="acrd-h">
                 <span>Recent Transactions</span>
@@ -299,7 +400,7 @@ export default function Dashboard() {
               ) : <div className="acrd-empty">No transactions</div>}
             </div>
           </div>
-          <div className="col-6">
+          <div className="col-4">
             <div className="acrd">
               <div className="acrd-h">
                 <span>Active Projects</span>
@@ -311,8 +412,8 @@ export default function Dashboard() {
                       <div className="proj-tl">
                         <span className="proj-tn">{p.name}</span>
                         <span className="proj-ts" style={{
-                          color: p.status === 'active' || p.status === 'in_progress' ? '#10B981' : p.status === 'pending' ? ORANGE : '#94A3B8',
-                          background: (p.status === 'active' || p.status === 'in_progress' ? '#10B981' : p.status === 'pending' ? ORANGE : '#94A3B8') + '15'
+                          color: p.status === 'active' || p.status === 'in_progress' ? GREEN : p.status === 'pending' ? ORANGE : '#94A3B8',
+                          background: (p.status === 'active' || p.status === 'in_progress' ? GREEN : p.status === 'pending' ? ORANGE : '#94A3B8') + '15'
                         }}>{(p.status || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
                       </div>
                       <div className="proj-tbar"><div className="proj-tbf" style={{ width: `${p.progress}%` }} /></div>
@@ -321,6 +422,92 @@ export default function Dashboard() {
                   ))}
                 </div>
               ) : <div className="acrd-empty">No projects</div>}
+            </div>
+          </div>
+          <div className="col-4">
+            <div className="acrd">
+              <div className="acrd-h">
+                <span>Pending Expenses</span>
+                {totalPendingExpenses > 0 && <span className="acrd-badge" style={{ color: ORANGE, background: '#F59E0B12' }}>{fmt(totalPendingExpenses)}</span>}
+              </div>
+              {pendingExpenses.length > 0 ? (
+                <div className="tx-tbl">
+                  <div className="tx-th"><span>Staff</span><span>Category</span><span style={{ textAlign: 'right' }}>Amount</span></div>
+                  {pendingExpenses.map((e, i) => (
+                    <div key={i} className="tx-tr">
+                      <span className="tx-td">{e.staff_name || e.staff?.name || '—'}</span>
+                      <span className="tx-tc"><span className="tx-dot expense" />{e.category || '—'}</span>
+                      <span className="tx-ta expense">{fmt(e.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="acrd-empty">No pending expenses</div>}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 6: Pending Invoices + Cash Flow + Maintenance */}
+        <div className="db-g" style={{ marginBottom: 0 }}>
+          <div className="col-4">
+            <div className="acrd">
+              <div className="acrd-h">
+                <span>Pending Invoices</span>
+                {totalPendingInvoiceAmt > 0 && <span className="acrd-badge" style={{ color: RED, background: '#EF444412' }}>{fmt(totalPendingInvoiceAmt)}</span>}
+              </div>
+              {pendingInvoices.length > 0 ? (
+                <div className="tx-tbl">
+                  <div className="tx-th"><span>Client</span><span>Project</span><span style={{ textAlign: 'right' }}>Amount</span></div>
+                  {pendingInvoices.map((inv, i) => (
+                    <div key={i} className="tx-tr">
+                      <span className="tx-td">{inv.client_name || inv.client?.name || '—'}</span>
+                      <span className="tx-tc">{inv.project_name || inv.project?.name || '—'}</span>
+                      <span className="tx-ta expense">{fmt(inv.total_amount || inv.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="acrd-empty">All invoices paid</div>}
+            </div>
+          </div>
+          <div className="col-4">
+            <div className="acrd">
+              <div className="acrd-h">
+                <span>Cash Flow</span>
+              </div>
+              <div className="acrd-body">
+                {cashFlowData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={cashFlowData.slice(-7)} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} tickFormatter={v => `₹${(v / 1e3).toFixed(0)}K`} width={40} />
+                      <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontSize: 12 }} formatter={v => [fmt(v), 'Amount']} />
+                      <Bar dataKey="inflow" fill={GREEN} radius={[4, 4, 0, 0]} barSize={16} />
+                      <Bar dataKey="outflow" fill={RED} radius={[4, 4, 0, 0]} barSize={16} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="acrd-empty">No cash flow data</div>}
+              </div>
+            </div>
+          </div>
+          <div className="col-4">
+            <div className="acrd">
+              <div className="acrd-h">
+                <span>🔧 Maintenance Alerts</span>
+              </div>
+              <div className="acrd-body">
+                {maintDueCount > 0 ? (
+                  <div className="tx-tbl">
+                    <div className="tx-th"><span>Vehicle</span><span>Type</span><span style={{ textAlign: 'right' }}>Due</span></div>
+                    {(raw.maintenanceDue || []).slice(0, 5).map((m, i) => (
+                      <div key={i} className="tx-tr">
+                        <span className="tx-td">{m.vehicle_name || m.make || '—'}</span>
+                        <span className="tx-tc"><span className="tx-dot expense" />{m.maintenance_type || m.type || 'Service'}</span>
+                        <span className="tx-ta expense">{m.due_date || m.next_due || '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : <div className="acrd-empty" style={{ color: GREEN }}>✓ All vehicles maintained</div>}
+              </div>
             </div>
           </div>
         </div>
