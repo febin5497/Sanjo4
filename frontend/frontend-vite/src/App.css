@@ -62,9 +62,10 @@ body {
 .main-content {
   flex-grow: 1;
   margin-left: 280px;
-  padding: 28px;
+  padding: 0;
   background: var(--bg-page);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-layout {

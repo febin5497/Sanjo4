@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import api from "../../api/api"
 import { useToast } from "../../components/Toast"
 import "../../styles/Dashboard.css"
@@ -9,7 +9,9 @@ const ORANGE = "#F59E0B"
 const GREEN = "#10B981"
 const RED = "#EF4444"
 const PURPLE = "#8B5CF6"
-const COLORS = [BLUE, GREEN, ORANGE, RED, PURPLE, "#06B6D4", "#EC4899"]
+const CYAN = "#06B6D4"
+const PINK = "#EC4899"
+const COLORS = [BLUE, GREEN, ORANGE, RED, PURPLE, CYAN, PINK]
 
 function n(v) { return v ?? 0 }
 
@@ -34,15 +36,15 @@ function ago(ts) {
   } catch { return "" }
 }
 
-function Gauge({ pct, color = BLUE, size = 104 }) {
-  const s = 6, r = (size - s) / 2, c = Math.PI * r, off = c * (1 - Math.min(Math.max(pct, 0), 100) / 100)
+function Gauge({ pct, color = BLUE, size = 80 }) {
+  const s = 5, r = (size - s) / 2, c = Math.PI * r, off = c * (1 - Math.min(Math.max(pct, 0), 100) / 100)
   const cx = size / 2, cy = size / 2
   return (
-    <svg width={size} height={size / 2 + 20} viewBox={`0 0 ${size} ${size / 2 + 20}`}>
+    <svg width={size} height={size / 2 + 16} viewBox={`0 0 ${size} ${size / 2 + 16}`}>
       <path d={`M ${s / 2} ${cy} A ${r} ${r} 0 0 1 ${size - s / 2} ${cy}`} fill="none" stroke="#E8EDF2" strokeWidth={s} strokeLinecap="round" />
       <path d={`M ${s / 2} ${cy} A ${r} ${r} 0 0 1 ${size - s / 2} ${cy}`} fill="none" stroke={color} strokeWidth={s} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} />
-      <text x={cx} y={cy + 4} textAnchor="middle" fontSize={20} fontWeight={700} fill="#1E293B" fontFamily="Inter,system-ui,sans-serif">
-        {Math.round(pct)}<tspan fontSize={11} fill="#94A3B8">%</tspan>
+      <text x={cx} y={cy + 2} textAnchor="middle" fontSize={14} fontWeight={700} fill="#1E293B" fontFamily="Inter,system-ui,sans-serif">
+        {Math.round(pct)}<tspan fontSize={8} fill="#94A3B8">%</tspan>
       </text>
     </svg>
   )
@@ -101,7 +103,7 @@ function HeroCard({ project, totalIncome, totalExpense, balance, margin }) {
             <div className="av av-more">+2</div>
           </div>
           <div className="hero-meta">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
             <span>Deadline: Dec 2026</span>
           </div>
         </div>
@@ -113,9 +115,24 @@ function HeroCard({ project, totalIncome, totalExpense, balance, margin }) {
 function GaugeCard({ pct, label, sub, color = BLUE }) {
   return (
     <div className="gcrd">
-      <Gauge pct={pct} color={color} size={100} />
+      <Gauge pct={pct} color={color} size={80} />
       <div className="gcrd-l">{label}</div>
       <div className="gcrd-s">{sub}</div>
+    </div>
+  )
+}
+
+function ChartTooltip({ active, payload, label, formatter }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={{ background: '#fff', borderRadius: 10, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', padding: '8px 12px', fontFamily: 'Inter,system-ui,sans-serif', fontSize: 12 }}>
+      <div style={{ fontWeight: 600, color: '#1E293B', marginBottom: 4 }}>{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} style={{ color: p.color, display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+          <span>{p.name}</span>
+          <span style={{ fontWeight: 600 }}>{formatter ? formatter(p.value) : fmt(p.value)}</span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -123,7 +140,7 @@ function GaugeCard({ pct, label, sub, color = BLUE }) {
 export default function Dashboard() {
   const { showError } = useToast()
   const [loading, setLoading] = useState(true)
-  const [raw, setRaw] = useState({})
+  const [raw, setRaw] = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -136,13 +153,13 @@ export default function Dashboard() {
           w(api.get('/api/projects?per_page=100')), w(api.get('/api/staff?per_page=100')),
           w(api.get('/api/vehicles?per_page=100')), w(api.get('/api/finance/summary')),
           w(api.get('/api/finance/budgets?per_page=50')), w(api.get('/api/equipment/stats')),
-          w(api.get('/api/admin/activity-logs?per_page=10')), w(api.get('/api/finance/transactions?per_page=10')),
+          w(api.get('/api/admin/activity-logs?per_page=10')), w(api.get('/api/finance/transactions?per_page=50')),
           w(api.get('/api/attendance?per_page=100')), w(api.get('/api/attendance/approvals/stats')),
           w(api.get('/api/staff/expenses?per_page=50')), w(api.get('/api/finance/invoices?per_page=20')),
           w(api.get('/api/vehicles/maintenance-due')), w(api.get('/api/finance/reports/cash-flow')),
         ])
         const projects = ar(pr), staff = ar(sr), vehicles = ar(vr), budgets = ar(br)
-        const txs = ar(tr).slice(0, 6), logs = ar(lr).slice(0, 6)
+        const txs = ar(tr), logs = ar(lr).slice(0, 8)
         const attendance = ar(att), expenses = ar(exp), invoices = ar(inv)
         const maintenanceDue = ar(maint)
 
@@ -163,7 +180,7 @@ export default function Dashboard() {
           const all = await api.get('/api/finance/transactions?per_page=500')
           const a = ar(all); const m = {}
           a.forEach(x => { const c = x.category || 'Other'; m[c] = (m[c] || 0) + Math.abs(n(x.amount)) })
-          cats = Object.entries(m).map(([n, v]) => ({ name: n, value: v })).sort((a, b) => b.value - a.value).slice(0, 6)
+          cats = Object.entries(m).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 6)
         } catch {}
 
         let attStatsData = {}
@@ -182,7 +199,54 @@ export default function Dashboard() {
         let cashFlowData = []
         if (ok(cashFlow)) cashFlowData = Array.isArray(cashFlow.data.data) ? cashFlow.data.data : []
 
-        setRaw({ projects, staff, vehicles, ti, te, mr, bu, bt, ea, et, txs, logs, cats, attendance, attStatsData, expenses, pendingExpenses, totalPendingExpenses, invoices, paidInvoices, pendingInvoices, totalPendingInvoiceAmt, maintenanceDue, totalFuel, cashFlowData })
+        // Build expense trend from transactions
+        const expTrend = {}
+        txs.filter(t => t.type === 'expense').forEach(t => {
+          const d = t.date || (t.created_at || '').slice(0, 10)
+          if (d) expTrend[d] = (expTrend[d] || 0) + Math.abs(n(t.amount))
+        })
+        const expenseTrend = Object.entries(expTrend).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)).slice(-7)
+
+        // Build income trend
+        const incTrend = {}
+        txs.filter(t => t.type === 'income').forEach(t => {
+          const d = t.date || (t.created_at || '').slice(0, 10)
+          if (d) incTrend[d] = (incTrend[d] || 0) + n(t.amount)
+        })
+        const incomeTrend = Object.entries(incTrend).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date)).slice(-7)
+
+        // Staff by role
+        const roleMap = {}
+        staff.forEach(s => { const r = s.role || 'Other'; roleMap[r] = (roleMap[r] || 0) + 1 })
+        const staffByRole = Object.entries(roleMap).map(([name, value]) => ({ name: name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), value }))
+
+        // Attendance by status
+        const attStatus = { Present: 0, Absent: 0, Late: 0, Leave: 0 }
+        attendance.forEach(a => {
+          const st = (a.status || 'present').toLowerCase()
+          if (st === 'present' || st === 'approved') attStatus.Present++
+          else if (st === 'absent') attStatus.Absent++
+          else if (st === 'late') attStatus.Late++
+          else if (st === 'leave') attStatus.Leave++
+        })
+        const attPie = Object.entries(attStatus).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value }))
+
+        // Monthly revenue data (last 6 months)
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const revByMonth = {}
+        txs.filter(t => t.type === 'income').forEach(t => {
+          const d = new Date(t.date || t.created_at)
+          const m = months[d.getMonth()]
+          revByMonth[m] = (revByMonth[m] || 0) + n(t.amount)
+        })
+        const revData = months.filter(m => revByMonth[m]).map(m => ({ month: m, revenue: revByMonth[m] }))
+
+        // Project status distribution
+        const projStatus = {}
+        projects.forEach(p => { const s = (p.status || 'pending').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); projStatus[s] = (projStatus[s] || 0) + 1 })
+        const projDist = Object.entries(projStatus).map(([name, value]) => ({ name, value }))
+
+        setRaw({ projects, staff, vehicles, ti, te, mr, bu, bt, ea, et, txs: txs.slice(0, 6), logs, cats, attendance, attStatsData, expenses, pendingExpenses, totalPendingExpenses, invoices, paidInvoices, pendingInvoices, totalPendingInvoiceAmt, maintenanceDue, totalFuel, cashFlowData, expenseTrend, incomeTrend, staffByRole, attPie, revData, projDist })
       } catch { showError('Failed to load') }
       setLoading(false)
     }
@@ -190,9 +254,9 @@ export default function Dashboard() {
   }, [])
 
   const metrics = useMemo(() => {
-    const { projects, staff, vehicles, ti, te, mr, bu, bt, ea, et, txs, logs, cats, attendance, attStatsData = {}, expenses, pendingExpenses, totalPendingExpenses, invoices, paidInvoices, pendingInvoices, totalPendingInvoiceAmt, maintenanceDue, totalFuel, cashFlowData } = raw || {}
-    if (!projects && !staff && !vehicles) return { count: 0, activeStaff: 0, totalStaff: 0, ti: 0, te: 0, mr: 0, balance: 0, margin: "0.0", bpct: 0, avgProgress: 0, resourcePct: 0, revPct: 0, featured: null, projects: [], txs: [], logs: [], cats: [], bu: 0, bt: 0, activeVehicles: 0, totalVehicles: 0, maintDueCount: 0, totalFuel: 0, presentToday: 0, pendingApprovals: 0, pendingExpenses: [], totalPendingExpenses: 0, paidInvoices: 0, pendingInvoices: [], totalPendingInvoiceAmt: 0, cashFlowData: [] }
-    const count = n(projects?.length)
+    if (!raw) return { count: 0, activeStaff: 0, totalStaff: 0, ti: 0, te: 0, mr: 0, balance: 0, margin: "0.0", bpct: 0, avgProgress: 0, resourcePct: 0, revPct: 0, featured: null, projects: [], txs: [], logs: [], cats: [], bu: 0, bt: 0, activeVehicles: 0, totalVehicles: 0, maintDueCount: 0, totalFuel: 0, presentToday: 0, pendingApprovals: 0, pendingExpenses: [], totalPendingExpenses: 0, paidInvoices: 0, pendingInvoices: [], totalPendingInvoiceAmt: 0, cashFlowData: [], expenseTrend: [], incomeTrend: [], staffByRole: [], attPie: [], revData: [], projDist: [] }
+    const { projects, staff, vehicles, ti, te, mr, bu, bt, ea, et, txs, logs, cats, attendance, attStatsData = {}, expenses, pendingExpenses, totalPendingExpenses, invoices, paidInvoices, pendingInvoices, totalPendingInvoiceAmt, maintenanceDue, totalFuel, cashFlowData, expenseTrend, incomeTrend, staffByRole, attPie, revData, projDist } = raw
+    const count = (projects || []).length
     const activeStaff = (staff || []).filter(s => s.status !== 'inactive').length
     const totalStaff = (staff || []).length
     const balance = ti - te
@@ -205,11 +269,9 @@ export default function Dashboard() {
     const monthlyTarget = ti > 0 && ti / 12 > 0 ? Math.round((mr / (ti / 12)) * 100) : 0
     const revPct = Math.min(monthlyTarget, 100)
     const featured = projects?.[0] || null
-
     const activeVehicles = (vehicles || []).filter(v => v.status === 'active' || !v.status).length
     const totalVehicles = (vehicles || []).length
     const maintDueCount = (maintenanceDue || []).length
-
     const todayAtt = (attendance || []).filter(a => {
       const d = new Date(a.date || a.created_at)
       const today = new Date()
@@ -217,17 +279,16 @@ export default function Dashboard() {
     }).length
     const presentToday = attStatsData.approved || attStatsData.today_present || todayAtt
     const pendingApprovals = attStatsData.pending || 0
-
-    return { count, activeStaff, totalStaff, ti, te, mr, balance, margin, bpct, avgProgress, resourcePct, revPct, featured, projects: projects?.slice(0, 4) || [], txs, logs, cats, bu, bt, activeVehicles, totalVehicles, maintDueCount, totalFuel, presentToday, pendingApprovals, pendingExpenses: pendingExpenses?.slice(0, 5) || [], totalPendingExpenses, paidInvoices: paidInvoices?.length || 0, pendingInvoices: pendingInvoices?.slice(0, 5) || [], totalPendingInvoiceAmt, cashFlowData }
+    return { count, activeStaff, totalStaff, ti, te, mr, balance, margin, bpct, avgProgress, resourcePct, revPct, featured, projects: (projects || []).slice(0, 4), txs, logs, cats, bu, bt, activeVehicles, totalVehicles, maintDueCount, totalFuel, presentToday, pendingApprovals, pendingExpenses: (pendingExpenses || []).slice(0, 5), totalPendingExpenses, paidInvoices: (paidInvoices || []).length, pendingInvoices: (pendingInvoices || []).slice(0, 5), totalPendingInvoiceAmt, cashFlowData, expenseTrend, incomeTrend, staffByRole, attPie, revData, projDist }
   }, [raw])
 
-  if (loading) return (
-    <div className="db" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-      <span style={{ fontFamily: 'Inter, system-ui, sans-serif', color: '#94A3B8', fontSize: 14 }}>Loading dashboard…</span>
+  if (loading || !raw) return (
+    <div className="db" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ fontFamily: 'Inter, system-ui, sans-serif', color: '#94A3B8', fontSize: 13 }}>Loading dashboard…</span>
     </div>
   )
 
-  const { count, activeStaff, totalStaff, ti, te, mr, balance, margin, bpct, avgProgress, resourcePct, revPct, featured, projects, txs, logs, cats, bu, bt, activeVehicles, totalVehicles, maintDueCount, totalFuel, presentToday, pendingApprovals, pendingExpenses, totalPendingExpenses, paidInvoices, pendingInvoices, totalPendingInvoiceAmt, cashFlowData } = metrics
+  const { count, activeStaff, totalStaff, ti, te, mr, balance, margin, bpct, avgProgress, resourcePct, revPct, featured, projects, txs, logs, cats, bu, bt, activeVehicles, totalVehicles, maintDueCount, totalFuel, presentToday, pendingApprovals, pendingExpenses, totalPendingExpenses, paidInvoices, pendingInvoices, totalPendingInvoiceAmt, cashFlowData, expenseTrend, incomeTrend, staffByRole, attPie, revData, projDist } = metrics
 
   return (
     <div className="db">
@@ -240,7 +301,7 @@ export default function Dashboard() {
           <div className="col-4">
             <div className="alert-crd">
               <div className="alert-h">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ORANGE} strokeWidth="2"><path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" /></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={ORANGE} strokeWidth="2"><path d="M18 20V10" /><path d="M12 20V4" /><path d="M6 20v-6" /></svg>
                 <span>Activity Feed</span>
               </div>
               <div className="alert-l">
@@ -252,145 +313,254 @@ export default function Dashboard() {
                       <p className="alert-t">{ago(a.created_at || a.timestamp)}</p>
                     </div>
                   </div>
-                )) : <p style={{ color: '#94A3B8', fontSize: 13, padding: 16, textAlign: 'center' }}>No recent activity</p>}
+                )) : <p style={{ color: '#94A3B8', fontSize: 12, padding: 12, textAlign: 'center' }}>No recent activity</p>}
               </div>
-              <button className="alert-btn">View All Activity →</button>
             </div>
           </div>
         </div>
 
         {/* Row 2: Gauge Cards */}
         <div className="db-g">
-          <div className="col-3">
-            <GaugeCard pct={bpct} label="Budget Utilization" sub={`${fmt(bu)} / ${fmt(bt)}`} color={bpct > 80 ? RED : BLUE} />
-          </div>
-          <div className="col-3">
-            <GaugeCard pct={avgProgress} label="Project Progress" sub={`${count} projects`} color={GREEN} />
-          </div>
-          <div className="col-3">
-            <GaugeCard pct={resourcePct} label="Resource Allocation" sub="Staff & Equipment" color={ORANGE} />
-          </div>
-          <div className="col-3">
-            <GaugeCard pct={revPct} label="Revenue Target" sub={`${fmt(mr)} this month`} color={PURPLE} />
-          </div>
+          <div className="col-3"><GaugeCard pct={bpct} label="Budget Utilization" sub={`${fmt(bu)} / ${fmt(bt)}`} color={bpct > 80 ? RED : BLUE} /></div>
+          <div className="col-3"><GaugeCard pct={avgProgress} label="Project Progress" sub={`${count} projects`} color={GREEN} /></div>
+          <div className="col-3"><GaugeCard pct={resourcePct} label="Resource Allocation" sub="Staff & Equipment" color={ORANGE} /></div>
+          <div className="col-3"><GaugeCard pct={revPct} label="Revenue Target" sub={`${fmt(mr)} this month`} color={PURPLE} /></div>
         </div>
 
         {/* Row 3: Staff + Vehicle + Finance Summary */}
         <div className="db-g">
           <div className="col-4">
             <div className="acrd">
-              <div className="acrd-h">
-                <span>👥 Staff Overview</span>
-              </div>
+              <div className="acrd-h"><span>👥 Staff Overview</span></div>
               <div className="acrd-body">
                 <div className="stat-grid">
-                  <StatMini icon="👤" value={totalStaff} label="Total Staff" color={BLUE} />
-                  <StatMini icon="✅" value={presentToday} label="Present Today" color={GREEN} />
-                  <StatMini icon="⏳" value={pendingApprovals} label="Pending Approvals" color={ORANGE} />
-                  <StatMini icon="📊" value={`${activeStaff}`} label="Active Staff" color={PURPLE} />
+                  <StatMini icon="👤" value={totalStaff} label="Total" color={BLUE} />
+                  <StatMini icon="✅" value={presentToday} label="Present" color={GREEN} />
+                  <StatMini icon="⏳" value={pendingApprovals} label="Approvals" color={ORANGE} />
+                  <StatMini icon="📊" value={activeStaff} label="Active" color={PURPLE} />
                 </div>
               </div>
             </div>
           </div>
           <div className="col-4">
             <div className="acrd">
-              <div className="acrd-h">
-                <span>🚗 Vehicle Status</span>
-              </div>
+              <div className="acrd-h"><span>🚗 Vehicle Status</span></div>
               <div className="acrd-body">
                 <div className="stat-grid">
-                  <StatMini icon="🚐" value={activeVehicles} label="Active Vehicles" color={BLUE} />
-                  <StatMini icon="🔧" value={maintDueCount} label="Maintenance Due" color={maintDueCount > 0 ? RED : GREEN} />
-                  <StatMini icon="⛽" value={fmt(totalFuel)} label="Total Fuel Cost" color={ORANGE} />
-                  <StatMini icon="📊" value={totalVehicles} label="Total Fleet" color={PURPLE} />
+                  <StatMini icon="🚐" value={activeVehicles} label="Active" color={BLUE} />
+                  <StatMini icon="🔧" value={maintDueCount} label="Service Due" color={maintDueCount > 0 ? RED : GREEN} />
+                  <StatMini icon="⛽" value={fmt(totalFuel)} label="Fuel Cost" color={ORANGE} />
+                  <StatMini icon="📊" value={totalVehicles} label="Fleet" color={PURPLE} />
                 </div>
               </div>
             </div>
           </div>
           <div className="col-4">
             <div className="acrd">
-              <div className="acrd-h">
-                <span>💰 Finance Summary</span>
-              </div>
+              <div className="acrd-h"><span>💰 Finance Summary</span></div>
               <div className="acrd-body">
                 <div className="stat-grid">
-                  <StatMini icon="📄" value={paidInvoices} label="Paid Invoices" color={GREEN} />
-                  <StatMini icon="⏳" value={pendingInvoices.length} label="Pending Invoices" color={ORANGE} />
+                  <StatMini icon="📄" value={paidInvoices} label="Paid" color={GREEN} />
+                  <StatMini icon="⏳" value={pendingInvoices.length} label="Pending" color={ORANGE} />
                   <StatMini icon="💸" value={fmt(totalPendingInvoiceAmt)} label="Outstanding" color={RED} />
-                  <StatMini icon="📊" value={fmt(balance)} label="Net Profit" color={balance >= 0 ? GREEN : RED} />
+                  <StatMini icon="📊" value={fmt(balance)} label="Net" color={balance >= 0 ? GREEN : RED} />
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Row 4: Charts */}
+        {/* Row 4: Income vs Expenses + Spending Pie + Attendance Pie */}
         <div className="db-g">
-          <div className="col-6">
+          <div className="col-4">
             <div className="acrd">
               <div className="acrd-h">
                 <span>Income vs Expenses</span>
                 <span className="acrd-badge" style={{ color: GREEN, background: '#10B98112' }}>Net {fmt(balance)}</span>
               </div>
               <div className="acrd-body">
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={[{ n: 'Income', v: ti }, { n: 'Expenses', v: te }]} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={[{ n: 'Income', v: ti }, { n: 'Expenses', v: te }]} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                    <XAxis dataKey="n" tick={{ fontSize: 12, fill: '#94A3B8', fontFamily: 'Inter,system-ui,sans-serif' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#94A3B8', fontFamily: 'Inter,system-ui,sans-serif' }} tickFormatter={v => `₹${(v / 1e5).toFixed(0)}L`} width={45} />
-                    <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontFamily: 'Inter,system-ui,sans-serif', fontSize: 12 }} formatter={v => [fmt(v), 'Amount']} />
-                    <Bar dataKey="v" radius={[6, 6, 0, 0]} barSize={50}>
+                    <XAxis dataKey="n" tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                    <YAxis tick={{ fontSize: 9, fill: '#94A3B8' }} tickFormatter={v => `₹${(v / 1e5).toFixed(0)}L`} width={40} />
+                    <Tooltip content={<ChartTooltip formatter={v => fmt(v)} />} />
+                    <Bar dataKey="v" radius={[4, 4, 0, 0]} barSize={36}>
                       <Cell fill={BLUE} /><Cell fill={ORANGE} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="acrd-f">
-                <span><span style={{ color: BLUE }}>●</span> Income: {fmt(ti)}</span>
-                <span><span style={{ color: ORANGE }}>●</span> Expenses: {fmt(te)}</span>
-                <span><span style={{ color: balance >= 0 ? GREEN : RED }}>●</span> Profit: {fmt(balance)}</span>
-              </div>
             </div>
           </div>
-          <div className="col-6">
+          <div className="col-4">
             <div className="acrd">
-              <div className="acrd-h">
-                <span>Spending by Category</span>
-              </div>
+              <div className="acrd-h"><span>Spending by Category</span></div>
               <div className="acrd-body" style={{ display: 'flex', alignItems: 'center' }}>
                 {cats.length > 0 ? (
                   <>
-                    <ResponsiveContainer width="55%" height={200}>
+                    <ResponsiveContainer width="50%" height={150}>
                       <PieChart>
-                        <Pie data={cats} cx="50%" cy="50%" outerRadius={72} innerRadius={48} paddingAngle={3} dataKey="value">
+                        <Pie data={cats} cx="50%" cy="50%" outerRadius={55} innerRadius={35} paddingAngle={2} dataKey="value">
                           {cats.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                         </Pie>
-                        <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontFamily: 'Inter,system-ui,sans-serif', fontSize: 12 }} formatter={v => [fmt(v), 'Amount']} />
+                        <Tooltip content={<ChartTooltip formatter={v => fmt(v)} />} />
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="pie-legend">
-                      {cats.map((c, i) => (
+                      {cats.slice(0, 5).map((c, i) => (
                         <div key={i} className="pl-i"><span style={{ background: COLORS[i % COLORS.length] }} />{c.name}</div>
                       ))}
                     </div>
                   </>
-                ) : <div style={{ flex: 1, textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>No transaction data</div>}
+                ) : <div style={{ flex: 1, textAlign: 'center', color: '#94A3B8', fontSize: 12 }}>No data</div>}
+              </div>
+            </div>
+          </div>
+          <div className="col-4">
+            <div className="acrd">
+              <div className="acrd-h"><span>Attendance Today</span></div>
+              <div className="acrd-body" style={{ display: 'flex', alignItems: 'center' }}>
+                {attPie.length > 0 ? (
+                  <>
+                    <ResponsiveContainer width="50%" height={150}>
+                      <PieChart>
+                        <Pie data={attPie} cx="50%" cy="50%" outerRadius={55} innerRadius={35} paddingAngle={2} dataKey="value">
+                          {attPie.map((_, i) => <Cell key={i} fill={[GREEN, RED, ORANGE, PURPLE][i % 4]} />)}
+                        </Pie>
+                        <Tooltip content={<ChartTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="pie-legend">
+                      {attPie.map((c, i) => (
+                        <div key={i} className="pl-i"><span style={{ background: [GREEN, RED, ORANGE, PURPLE][i % 4] }} />{c.name} ({c.value})</div>
+                      ))}
+                    </div>
+                  </>
+                ) : <div style={{ flex: 1, textAlign: 'center', color: '#94A3B8', fontSize: 12 }}>No attendance data</div>}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Row 5: Transactions + Projects + Pending Expenses */}
+        {/* Row 5: Revenue Trend + Expense Trend + Cash Flow */}
         <div className="db-g">
           <div className="col-4">
             <div className="acrd">
-              <div className="acrd-h">
-                <span>Recent Transactions</span>
+              <div className="acrd-h"><span>Revenue Trend</span></div>
+              <div className="acrd-body">
+                {incomeTrend.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={140}>
+                    <AreaChart data={incomeTrend} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <defs><linearGradient id="gInc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={GREEN} stopOpacity={0.3} /><stop offset="100%" stopColor={GREEN} stopOpacity={0.02} /></linearGradient></defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                      <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94A3B8' }} tickFormatter={d => d.slice(5)} />
+                      <YAxis tick={{ fontSize: 9, fill: '#94A3B8' }} tickFormatter={v => `₹${(v / 1e3).toFixed(0)}K`} width={38} />
+                      <Tooltip content={<ChartTooltip formatter={v => fmt(v)} />} />
+                      <Area type="monotone" dataKey="amount" stroke={GREEN} fill="url(#gInc)" strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : <div className="acrd-empty">No data</div>}
               </div>
+            </div>
+          </div>
+          <div className="col-4">
+            <div className="acrd">
+              <div className="acrd-h"><span>Expense Trend</span></div>
+              <div className="acrd-body">
+                {expenseTrend.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={140}>
+                    <AreaChart data={expenseTrend} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <defs><linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={RED} stopOpacity={0.3} /><stop offset="100%" stopColor={RED} stopOpacity={0.02} /></linearGradient></defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                      <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94A3B8' }} tickFormatter={d => d.slice(5)} />
+                      <YAxis tick={{ fontSize: 9, fill: '#94A3B8' }} tickFormatter={v => `₹${(v / 1e3).toFixed(0)}K`} width={38} />
+                      <Tooltip content={<ChartTooltip formatter={v => fmt(v)} />} />
+                      <Area type="monotone" dataKey="amount" stroke={RED} fill="url(#gExp)" strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : <div className="acrd-empty">No data</div>}
+              </div>
+            </div>
+          </div>
+          <div className="col-4">
+            <div className="acrd">
+              <div className="acrd-h"><span>Cash Flow</span></div>
+              <div className="acrd-body">
+                {cashFlowData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={140}>
+                    <BarChart data={cashFlowData.slice(-7)} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                      <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94A3B8' }} />
+                      <YAxis tick={{ fontSize: 9, fill: '#94A3B8' }} tickFormatter={v => `₹${(v / 1e3).toFixed(0)}K`} width={38} />
+                      <Tooltip content={<ChartTooltip formatter={v => fmt(v)} />} />
+                      <Bar dataKey="inflow" fill={GREEN} radius={[3, 3, 0, 0]} barSize={10} />
+                      <Bar dataKey="outflow" fill={RED} radius={[3, 3, 0, 0]} barSize={10} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="acrd-empty">No data</div>}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 6: Staff by Role + Project Status + Transactions + Projects */}
+        <div className="db-g">
+          <div className="col-3">
+            <div className="acrd">
+              <div className="acrd-h"><span>Staff by Role</span></div>
+              <div className="acrd-body" style={{ display: 'flex', alignItems: 'center' }}>
+                {staffByRole.length > 0 ? (
+                  <>
+                    <ResponsiveContainer width="50%" height={130}>
+                      <PieChart>
+                        <Pie data={staffByRole} cx="50%" cy="50%" outerRadius={48} innerRadius={28} paddingAngle={2} dataKey="value">
+                          {staffByRole.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip content={<ChartTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="pie-legend">
+                      {staffByRole.map((c, i) => (
+                        <div key={i} className="pl-i"><span style={{ background: COLORS[i % COLORS.length] }} />{c.name} ({c.value})</div>
+                      ))}
+                    </div>
+                  </>
+                ) : <div className="acrd-empty">No staff</div>}
+              </div>
+            </div>
+          </div>
+          <div className="col-3">
+            <div className="acrd">
+              <div className="acrd-h"><span>Project Status</span></div>
+              <div className="acrd-body" style={{ display: 'flex', alignItems: 'center' }}>
+                {projDist.length > 0 ? (
+                  <>
+                    <ResponsiveContainer width="50%" height={130}>
+                      <PieChart>
+                        <Pie data={projDist} cx="50%" cy="50%" outerRadius={48} innerRadius={28} paddingAngle={2} dataKey="value">
+                          {projDist.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip content={<ChartTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="pie-legend">
+                      {projDist.map((c, i) => (
+                        <div key={i} className="pl-i"><span style={{ background: COLORS[i % COLORS.length] }} />{c.name} ({c.value})</div>
+                      ))}
+                    </div>
+                  </>
+                ) : <div className="acrd-empty">No projects</div>}
+              </div>
+            </div>
+          </div>
+          <div className="col-3">
+            <div className="acrd">
+              <div className="acrd-h"><span>Recent Transactions</span></div>
               {txs.length > 0 ? (
                 <div className="tx-tbl">
                   <div className="tx-th"><span>Date</span><span>Category</span><span style={{ textAlign: 'right' }}>Amount</span></div>
-                  {txs.map((t, i) => (
+                  {txs.slice(0, 5).map((t, i) => (
                     <div key={i} className="tx-tr">
                       <span className="tx-td">{t.date || '—'}</span>
                       <span className="tx-tc"><span className={`tx-dot ${t.type}`} />{t.category || '—'}</span>
@@ -401,11 +571,9 @@ export default function Dashboard() {
               ) : <div className="acrd-empty">No transactions</div>}
             </div>
           </div>
-          <div className="col-4">
+          <div className="col-3">
             <div className="acrd">
-              <div className="acrd-h">
-                <span>Active Projects</span>
-              </div>
+              <div className="acrd-h"><span>Active Projects</span></div>
               {projects.length > 0 ? (
                 <div className="proj-tbl">
                   {projects.map((p, i) => (
@@ -418,13 +586,16 @@ export default function Dashboard() {
                         }}>{(p.status || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
                       </div>
                       <div className="proj-tbar"><div className="proj-tbf" style={{ width: `${p.progress}%` }} /></div>
-                      <span className="proj-tp">{p.progress}%</span>
                     </div>
                   ))}
                 </div>
               ) : <div className="acrd-empty">No projects</div>}
             </div>
           </div>
+        </div>
+
+        {/* Row 7: Pending Items + Maintenance */}
+        <div className="db-g" style={{ marginBottom: 0 }}>
           <div className="col-4">
             <div className="acrd">
               <div className="acrd-h">
@@ -445,10 +616,6 @@ export default function Dashboard() {
               ) : <div className="acrd-empty">No pending expenses</div>}
             </div>
           </div>
-        </div>
-
-        {/* Row 6: Pending Invoices + Cash Flow + Maintenance */}
-        <div className="db-g" style={{ marginBottom: 0 }}>
           <div className="col-4">
             <div className="acrd">
               <div className="acrd-h">
@@ -471,35 +638,12 @@ export default function Dashboard() {
           </div>
           <div className="col-4">
             <div className="acrd">
-              <div className="acrd-h">
-                <span>Cash Flow</span>
-              </div>
-              <div className="acrd-body">
-                {cashFlowData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={180}>
-                    <BarChart data={cashFlowData.slice(-7)} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94A3B8' }} />
-                      <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} tickFormatter={v => `₹${(v / 1e3).toFixed(0)}K`} width={40} />
-                      <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontSize: 12 }} formatter={v => [fmt(v), 'Amount']} />
-                      <Bar dataKey="inflow" fill={GREEN} radius={[4, 4, 0, 0]} barSize={16} />
-                      <Bar dataKey="outflow" fill={RED} radius={[4, 4, 0, 0]} barSize={16} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : <div className="acrd-empty">No cash flow data</div>}
-              </div>
-            </div>
-          </div>
-          <div className="col-4">
-            <div className="acrd">
-              <div className="acrd-h">
-                <span>🔧 Maintenance Alerts</span>
-              </div>
+              <div className="acrd-h"><span>🔧 Maintenance Alerts</span></div>
               <div className="acrd-body">
                 {maintDueCount > 0 ? (
                   <div className="tx-tbl">
                     <div className="tx-th"><span>Vehicle</span><span>Type</span><span style={{ textAlign: 'right' }}>Due</span></div>
-                    {(raw.maintenanceDue || []).slice(0, 5).map((m, i) => (
+                    {(raw.maintenanceDue || []).slice(0, 4).map((m, i) => (
                       <div key={i} className="tx-tr">
                         <span className="tx-td">{m.vehicle_name || m.make || '—'}</span>
                         <span className="tx-tc"><span className="tx-dot expense" />{m.maintenance_type || m.type || 'Service'}</span>
