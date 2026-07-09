@@ -295,15 +295,6 @@ export default function TopNavigation() {
               </div>
             )}
           </div>
-
-          <button
-            className="theme-toggle-btn"
-            onClick={() => setReadingMode(!readingMode)}
-            aria-label="Toggle reading mode"
-            title={readingMode ? "Switch to light mode" : "Switch to reading mode"}
-          >
-            <FaBook size={18} style={{ color: readingMode ? '#d97706' : 'inherit' }} />
-          </button>
         </div>
       </div>
     </nav>
